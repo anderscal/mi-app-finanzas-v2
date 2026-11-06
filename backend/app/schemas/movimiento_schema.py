@@ -164,3 +164,8 @@ class AbonoObligacionRespuesta(BaseModel):
 
     creado: bool
     mensaje: str
+
+class AnulacionMovimientoRespuesta(BaseModel):
+    id_movimiento: int
+    estado: Literal["ANULADO"]
+    mensaje: str
