@@ -69,6 +69,15 @@ app = FastAPI(
     version="1.0.0"
 )
 
+from app.schemas.movimiento_schema import (
+    AbonoObligacionCrear,
+    AbonoObligacionRespuesta,
+)
+
+from app.business.obligacion_escritura_service import (
+    registrar_abono_obligacion,
+)
+
 # Dependencia de sesión de PostgreSQL
 SesionBD = Annotated[Session, Depends(get_db)]
 
@@ -265,6 +274,23 @@ def crear_transferencia(
     )
 ):
     return registrar_transferencia(
+        db=db,
+        id_usuario=usuario.id_usuario,
+        datos=datos
+    )
+
+@app.post(
+    "/obligaciones/abonos",
+    response_model=AbonoObligacionRespuesta
+)
+def crear_abono_obligacion(
+    datos: AbonoObligacionCrear,
+    db: SesionBD,
+    usuario: Usuario = Depends(
+        obtener_usuario_actual
+    )
+):
+    return registrar_abono_obligacion(
         db=db,
         id_usuario=usuario.id_usuario,
         datos=datos
