@@ -55,6 +55,14 @@ from app.business.movimiento_escritura_service import (
     registrar_movimiento_normal
 )
 
+from app.schemas.movimiento_schema import (
+    TransferenciaCrear,
+    TransferenciaRespuesta,
+)
+
+from app.business.transferencia_service import (
+    registrar_transferencia,
+)
 app = FastAPI(
     title="API Finanzas Personales",
     description="Backend del sistema de gestión financiera personal",
@@ -241,6 +249,22 @@ def crear_movimiento_normal(
     usuario: Usuario = Depends(obtener_usuario_actual)
 ):
     return registrar_movimiento_normal(
+        db=db,
+        id_usuario=usuario.id_usuario,
+        datos=datos
+    )
+@app.post(
+    "/transferencias",
+    response_model=TransferenciaRespuesta
+)
+def crear_transferencia(
+    datos: TransferenciaCrear,
+    db: SesionBD,
+    usuario: Usuario = Depends(
+        obtener_usuario_actual
+    )
+):
+    return registrar_transferencia(
         db=db,
         id_usuario=usuario.id_usuario,
         datos=datos
