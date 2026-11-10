@@ -1,0 +1,272 @@
+// Adaptado de backend/JS/sync.js: la única diferencia es que la URL sale de config.js.
+
+
+import {
+    obtenerOperacionesLocales,
+    actualizarOperacionLocal,
+    eliminarOperacion
+} from "./offline-db.js";
+
+
+import { CONFIG } from "./config.js";
+
+export const API_URL = CONFIG.API_URL;
+
+const RUTAS = {
+    MOVIMIENTO_NORMAL: "/movimientos/normales",
+    TRANSFERENCIA: "/transferencias/",
+    ABONO_OBLIGACION: "/obligaciones/abonos"
+};
+
+function describirErrorHTTP(cuerpo) {
+    const detalle = cuerpo?.detail;
+
+    if (typeof detalle === "string") {
+        return detalle;
+    }
+
+    if (Array.isArray(detalle)) {
+        return detalle.map(error => {
+            const campo = Array.isArray(error.loc)
+                ? error.loc.join(".")
+                : "datos";
+
+            return `${campo}: ${error.msg || "Valor inválido"}`;
+        }).join(" | ");
+    }
+
+    return "La operación fue rechazada";
+}
+
+let sincronizando = false;
+
+
+export async function sincronizarPendientes({
+    token,
+    usuarioId,
+    onEvento = () => { }
+}) {
+    if (!token || !usuarioId) {
+        throw new Error(
+            "Debes iniciar sesión antes de sincronizar"
+        );
+    }
+
+    if (sincronizando) {
+        onEvento("Ya hay una sincronización en curso");
+        return;
+    }
+
+    sincronizando = true;
+
+    const resumen = {
+        sincronizadas: 0,
+        pendientes: 0,
+        errores: 0
+    };
+
+    try {
+        const todas = await obtenerOperacionesLocales();
+
+        // Solo operaciones pertenecientes
+        // al usuario actualmente autenticado.
+        const operaciones = todas
+            .filter(op =>
+                op.usuario_id === usuarioId &&
+                RUTAS[op.tipo_operacion] &&
+                (
+                    op.estado_sync === "PENDIENTE" ||
+                    op.estado_sync === "ERROR"
+                )
+            )
+            .sort((a, b) =>
+                a.fecha_local.localeCompare(b.fecha_local)
+            );
+
+        for (const operacion of operaciones) {
+
+            // No avanzar sobre un error anterior:
+            // otra operación puede depender de él.
+
+            if (operacion.estado_sync === "ERROR") {
+                onEvento(
+                    "Sincronización detenida: existe una operación " +
+                    "anterior que requiere revisión.\n" +
+                    "UUID: " + operacion.uuid_operacion + "\n" +
+                    "Motivo: " + (
+                        operacion.ultimo_error ||
+                        "Error no especificado"
+                    ) + "\n" +
+                    "Revisa o descarta esa operación antes " +
+                    "de continuar con las siguientes."
+                );
+
+                resumen.errores++;
+                break;
+            }
+
+
+            const uuid = operacion.uuid_operacion;
+
+            await actualizarOperacionLocal(uuid, {
+                intentos: (operacion.intentos || 0) + 1,
+                ultimo_error: null
+            });
+
+            let respuesta;
+
+            try {
+                respuesta = await fetch(
+                    API_URL + RUTAS[operacion.tipo_operacion],
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${token}`
+                        },
+                        body: JSON.stringify(operacion.datos)
+                    }
+                );
+            } catch (error) {
+                await actualizarOperacionLocal(uuid, {
+                    estado_sync: "PENDIENTE",
+                    ultimo_error: "Sin conexión con FastAPI"
+                });
+
+                onEvento(
+                    "Sin conexión. La operación sigue pendiente."
+                );
+
+                resumen.pendientes++;
+                break;
+            }
+
+            const cuerpo = await respuesta.json()
+                .catch(() => ({}));
+
+            if (respuesta.ok) {
+
+                let confirmado = false;
+
+                if (typeof cuerpo.creado === "boolean") {
+
+                    if (operacion.tipo_operacion === "TRANSFERENCIA") {
+
+                        const idTransferencia = Number(
+                            cuerpo.id_transferencia
+                        );
+
+                        const idValido =
+                            Number.isSafeInteger(idTransferencia) &&
+                            idTransferencia > 0;
+
+                        const uuidDevuelto = cuerpo.uuid_operacion;
+
+                        // Si FastAPI devuelve el UUID, debe coincidir.
+                        // Si no lo devuelve, exigimos al menos un
+                        // id_transferencia válido en la respuesta
+                        // correspondiente a esta solicitud.
+                        const uuidValido =
+                            uuidDevuelto == null ||
+                            String(uuidDevuelto).toLowerCase() ===
+                            String(uuid).toLowerCase();
+
+                        confirmado = idValido && uuidValido;
+
+                    } else {
+
+                        confirmado =
+                            String(cuerpo.uuid_local).toLowerCase() ===
+                            String(uuid).toLowerCase();
+                    }
+                }
+
+
+
+                if (!confirmado) {
+                    await actualizarOperacionLocal(uuid, {
+                        estado_sync: "PENDIENTE",
+                        ultimo_error:
+                            "El servidor respondió, pero no fue posible " +
+                            "confirmar la operación."
+                    });
+
+                    onEvento(
+                        "Confirmación no verificable. " +
+                        "La operación se conserva para reintentar " +
+                        "con el mismo UUID."
+                    );
+
+                    resumen.pendientes++;
+                    break;
+                }
+
+
+                // Confirmación válida del backend.
+                await eliminarOperacion(uuid);
+
+                resumen.sincronizadas++;
+
+                onEvento(
+                    cuerpo.creado
+                        ? "Operación registrada en PostgreSQL"
+                        : "Operación existente reconocida por UUID"
+                );
+
+                continue;
+            }
+
+            if (respuesta.status === 401) {
+                await actualizarOperacionLocal(uuid, {
+                    estado_sync: "PENDIENTE",
+                    ultimo_error:
+                        "Sesión expirada. Inicia sesión nuevamente."
+                });
+
+                onEvento(
+                    "Sesión expirada: vuelve a iniciar sesión."
+                );
+
+                resumen.pendientes++;
+                break;
+            }
+
+            if ([400, 403, 404, 409, 422].includes(
+                respuesta.status
+            )) {
+                await actualizarOperacionLocal(uuid, {
+                    estado_sync: "ERROR",
+                    ultimo_error:
+                        `HTTP ${respuesta.status}: ` +
+                        describirErrorHTTP(cuerpo)
+                });
+
+                onEvento(
+                    `Operación rechazada: HTTP ${respuesta.status}`
+                );
+
+                resumen.errores++;
+                break;
+            }
+
+            // Fallos del servidor o respuestas transitorias.
+            await actualizarOperacionLocal(uuid, {
+                estado_sync: "PENDIENTE",
+                ultimo_error:
+                    `HTTP ${respuesta.status}: reintentar`
+            });
+
+            onEvento(
+                "El servidor no pudo completar la solicitud."
+            );
+
+            resumen.pendientes++;
+            break;
+        }
+
+        return resumen;
+
+    } finally {
+        sincronizando = false;
+    }
+}

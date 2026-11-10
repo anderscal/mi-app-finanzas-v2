@@ -1,0 +1,14 @@
+{
+  "name": "Finanzas Personales",
+  "short_name": "Finanzas",
+  "description": "Control de finanzas personales en pesos colombianos",
+  "lang": "es-CO",
+  "start_url": "./#/inicio",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#0B7A57",
+  "icons": [
+    { "src": "icons/icono.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
