@@ -67,3 +67,30 @@ def obtener_cuentas_con_saldo(
     )
 
     return db.execute(consulta).mappings().all()
+
+def buscar_cuenta_por_nombre(
+    db: Session,
+    id_usuario: int,
+    nombre_cuenta: str
+):
+    consulta = (
+        select(CuentaFinanciera)
+        .where(
+            CuentaFinanciera.id_usuario == id_usuario,
+            func.lower(CuentaFinanciera.nombre_cuenta)
+            == nombre_cuenta.lower()
+        )
+        .limit(1)
+    )
+
+    return db.scalar(consulta)
+
+
+def insertar_cuenta(
+    db: Session,
+    cuenta: CuentaFinanciera
+):
+    db.add(cuenta)
+    db.flush()
+
+    return cuenta

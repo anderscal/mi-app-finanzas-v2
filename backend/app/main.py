@@ -1,13 +1,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.routers import (
     auth_router,
     consulta_router,
+    cuenta_router,
     movimiento_router,
     obligacion_router,
     transferencia_router,
 )
-
 app = FastAPI(
     title="API Finanzas Personales",
     description=(
@@ -36,8 +37,11 @@ app.add_middleware(
 
 app.include_router(
     auth_router.router
+    
 )
-
+app.include_router(
+    cuenta_router.router
+)
 app.include_router(
     movimiento_router.router
 )
