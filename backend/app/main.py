@@ -8,6 +8,7 @@ from app.routers import (
     movimiento_router,
     obligacion_router,
     transferencia_router,
+    
 )
 app = FastAPI(
     title="API Finanzas Personales",
@@ -27,7 +28,12 @@ app.add_middleware(
         "http://localhost:5501",
     ],
     allow_credentials=False,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=[
+    "GET",
+    "POST",
+    "PATCH",
+    "OPTIONS"
+],
     allow_headers=[
         "Authorization",
         "Content-Type",

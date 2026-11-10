@@ -44,6 +44,7 @@ def obtener_cuentas_con_saldo(
         select(
             CuentaFinanciera.id_cuenta,
             CuentaFinanciera.nombre_cuenta,
+            CuentaFinanciera.institucion,
             CuentaFinanciera.tipo_cuenta,
             CuentaFinanciera.estado,
             CuentaFinanciera.saldo_inicial,
@@ -94,3 +95,20 @@ def insertar_cuenta(
     db.flush()
 
     return cuenta
+
+
+def bloquear_cuenta_usuario(
+    db: Session,
+    id_cuenta: int,
+    id_usuario: int
+):
+    consulta = (
+        select(CuentaFinanciera)
+        .where(
+            CuentaFinanciera.id_cuenta == id_cuenta,
+            CuentaFinanciera.id_usuario == id_usuario
+        )
+        .with_for_update()
+    )
+
+    return db.scalar(consulta)

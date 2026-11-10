@@ -126,6 +126,20 @@ export function crearCuentaFinanciera(datos) {
   });
 }
 
+
+export function actualizarCuentaFinanciera(idCuenta, datos) {
+  return solicitar(`/cuentas/${idCuenta}`, {
+    metodo: 'PATCH',
+    json: datos
+  });
+}
+
+export function desactivarCuentaFinanciera(idCuenta) {
+  return solicitar(`/cuentas/${idCuenta}/desactivar`, {
+    metodo: 'POST'
+  });
+}
+
 // ---------- Movimientos ----------
 
 // POST /movimientos/normales → { id_movimiento, uuid_local, tipo, monto, creado, mensaje }
@@ -141,6 +155,7 @@ export function crearMovimientoNormal(movimiento) {
 //     monto, monto_gmf, creado, mensaje }
 // El backend crea la transferencia y sus dos movimientos en una sola transacción.
 // Es idempotente: reenviar el mismo uuid_operacion no la duplica.
+
 export function crearTransferencia({ uuid_operacion, id_cuenta_origen, id_cuenta_destino, monto, fecha_transferencia, motivo, aplica_gmf }) {
   const cuerpo = { uuid_operacion, id_cuenta_origen, id_cuenta_destino, monto, fecha_transferencia, aplica_gmf };
   if (motivo) cuerpo.motivo = motivo; // si no se envía, el backend usa "Movimiento interno"

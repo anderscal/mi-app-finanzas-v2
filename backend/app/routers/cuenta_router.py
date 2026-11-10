@@ -1,3 +1,4 @@
+from app.schemas.cuenta_schema import CuentaActualizar
 
 from fastapi import (
     APIRouter,
@@ -16,6 +17,8 @@ from app.schemas.cuenta_schema import (
 
 from app.business.cuenta_service import (
     crear_cuenta_financiera,
+    actualizar_cuenta_financiera,
+    desactivar_cuenta_financiera,
 )
 
 
@@ -39,4 +42,37 @@ def crear_cuenta(
         db=db,
         id_usuario=usuario.id_usuario,
         datos=datos
+    )
+
+@router.patch(
+    "/{id_cuenta}",
+    response_model=CuentaRespuesta
+)
+def actualizar_cuenta(
+    id_cuenta: int,
+    datos: CuentaActualizar,
+    db: SesionBD,
+    usuario: UsuarioActual
+):
+    return actualizar_cuenta_financiera(
+        db=db,
+        id_usuario=usuario.id_usuario,
+        id_cuenta=id_cuenta,
+        datos=datos
+    )
+
+
+@router.post(
+    "/{id_cuenta}/desactivar",
+    response_model=CuentaRespuesta
+)
+def desactivar_cuenta(
+    id_cuenta: int,
+    db: SesionBD,
+    usuario: UsuarioActual
+):
+    return desactivar_cuenta_financiera(
+        db=db,
+        id_usuario=usuario.id_usuario,
+        id_cuenta=id_cuenta
     )

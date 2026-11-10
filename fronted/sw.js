@@ -2,7 +2,7 @@
 // Las llamadas al backend no se guardan aquí; los movimientos sin conexión
 // van a IndexedDB (js/offline.js).
 
-const VERSION = 'fp-v6';
+const VERSION = 'fp-v7';
 const ARCHIVOS = [
   './',
   'index.html',
@@ -12,7 +12,7 @@ const ARCHIVOS = [
   'js/app.js', 'js/api.js', 'js/config.js', 'js/sesion.js', 'js/offline.js', 'js/offline-db.js', 'js/sync.js', 'js/util.js',
   'js/vistas/comun.js', 'js/vistas/login.js', 'js/vistas/registro.js', 'js/vistas/inicio.js', 'js/vistas/crear-cuenta.js',
   'js/vistas/registrar.js', 'js/vistas/transferir.js', 'js/vistas/abonar.js', 'js/vistas/movimientos.js', 'js/vistas/deudas.js',
-  'js/vistas/metas.js', 'js/vistas/asistente.js',
+  'js/vistas/metas.js', 'js/vistas/asistente.js', 'js/vistas/editar-cuenta.js'
 ];
 
 self.addEventListener('install', (e) => {

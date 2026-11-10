@@ -146,6 +146,23 @@ async function pintarCuentas(c) {
       <span class="cuenta-inicial" aria-hidden="true">${cu.tipo_cuenta === 'EFECTIVO' ? '$' : esc(cu.nombre_cuenta[0])}</span>
       <div class="cuenta-nombre"><strong>${esc(cu.nombre_cuenta)}</strong><span>${INICIALES_TIPO[cu.tipo_cuenta] || esc(cu.tipo_cuenta)}${cu.estado !== 'ACTIVA' ? ' · inactiva' : ''}</span></div>
       <span class="cuenta-saldo monto">${cop(cu.saldo_actual)}</span>
+
+${cu.estado === 'ACTIVA'
+      ? `
+    <a
+      class="enlace"
+      href="#/editar-cuenta/${Number(cu.id_cuenta)}"
+    >
+      Editar cuenta
+    </a>
+  `
+      : `
+    <span class="pista">
+      Cuenta desactivada
+    </span>
+  `
+    }
+
     </article>`).join('');
 }
 

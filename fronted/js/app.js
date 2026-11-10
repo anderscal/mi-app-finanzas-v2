@@ -8,6 +8,7 @@ import * as login from './vistas/login.js';
 import * as registro from './vistas/registro.js';
 import * as inicio from './vistas/inicio.js';
 import * as crearCuenta from './vistas/crear-cuenta.js';
+import * as editarCuenta from './vistas/editar-cuenta.js';
 import * as registrar from './vistas/registrar.js';
 import * as transferir from './vistas/transferir.js';
 import * as abonar from './vistas/abonar.js';
@@ -16,12 +17,14 @@ import * as deudas from './vistas/deudas.js';
 import * as metas from './vistas/metas.js';
 import * as asistente from './vistas/asistente.js';
 
+
 // publica: no exige sesión. nav: pestaña activa (null = sin barra inferior).
 const RUTAS = {
   '/login': { vista: login, publica: true, nav: null },
   '/registro': { vista: registro, publica: true, nav: null },
   '/inicio': { vista: inicio, nav: 'inicio' },
   '/nueva-cuenta': { vista: crearCuenta, nav: null },
+  '/editar-cuenta': { vista: editarCuenta, nav: null },
   '/movimientos': { vista: movimientos, nav: 'inicio' },
   '/registrar': { vista: registrar, nav: null },
   '/transferir': { vista: transferir, nav: null },
@@ -29,6 +32,7 @@ const RUTAS = {
   '/deudas': { vista: deudas, nav: 'deudas' },
   '/metas': { vista: metas, nav: 'metas' },
   '/asistente': { vista: asistente, nav: 'asistente' },
+
 };
 
 function pintarNav(activa) {
