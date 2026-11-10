@@ -67,7 +67,7 @@
     </section>
 
     <section>
-        <h3>2. Registrar gasto local</h3>
+        <h3>2A. Registrar gasto local</h3>
 
         <label for="cuenta">Cuenta financiera</label>
         <select id="cuenta"></select>
@@ -92,6 +92,63 @@
             Nueva operación
         </button>
     </section>
+
+
+<section>
+    <h3>2B. Registrar transferencia offline</h3>
+
+    <label for="cuentaOrigenTransferencia">
+        Cuenta origen
+    </label>
+    <select id="cuentaOrigenTransferencia"></select>
+
+    <label for="cuentaDestinoTransferencia">
+        Cuenta destino
+    </label>
+    <select id="cuentaDestinoTransferencia"></select>
+
+    <label for="montoTransferencia">
+        Monto de transferencia
+    </label>
+    <input
+        id="montoTransferencia"
+        type="number"
+        min="0.01"
+        step="0.01"
+        value="1000.00"
+    >
+
+    <label for="fechaTransferencia">
+        Fecha de transferencia
+    </label>
+    <input id="fechaTransferencia" type="date">
+
+    <label for="motivoTransferencia">
+        Motivo
+    </label>
+    <input
+        id="motivoTransferencia"
+        value="Prueba transferencia offline GMF"
+    >
+
+    <label for="aplicaGMFTransferencia">
+        <input
+            id="aplicaGMFTransferencia"
+            type="checkbox"
+            style="width:auto"
+            checked
+        >
+        Aplicar GMF (0,4 %)
+    </label>
+
+    <button id="guardarTransferencia" disabled>
+        Guardar transferencia en IndexedDB
+    </button>
+
+    <button id="nuevaTransferencia" disabled>
+        Nueva transferencia
+    </button>
+</section>
 
     <section>
         <h3>3. Sincronizar con FastAPI</h3>

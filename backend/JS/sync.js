@@ -141,15 +141,42 @@ export async function sincronizarPendientes({
                 .catch(() => ({}));
 
             if (respuesta.ok) {
-                const campoUuid =
-                    operacion.tipo_operacion === "TRANSFERENCIA"
-                        ? "uuid_operacion"
-                        : "uuid_local";
 
-                const confirmado =
-                    typeof cuerpo.creado === "boolean" &&
-                    String(cuerpo[campoUuid]).toLowerCase() ===
-                    String(uuid).toLowerCase();
+                let confirmado = false;
+
+                if (typeof cuerpo.creado === "boolean") {
+
+                    if (operacion.tipo_operacion === "TRANSFERENCIA") {
+
+                        const idTransferencia = Number(
+                            cuerpo.id_transferencia
+                        );
+
+                        const idValido =
+                            Number.isSafeInteger(idTransferencia) &&
+                            idTransferencia > 0;
+
+                        const uuidDevuelto = cuerpo.uuid_operacion;
+
+                        // Si FastAPI devuelve el UUID, debe coincidir.
+                        // Si no lo devuelve, exigimos al menos un
+                        // id_transferencia válido en la respuesta
+                        // correspondiente a esta solicitud.
+                        const uuidValido =
+                            uuidDevuelto == null ||
+                            String(uuidDevuelto).toLowerCase() ===
+                            String(uuid).toLowerCase();
+
+                        confirmado = idValido && uuidValido;
+
+                    } else {
+
+                        confirmado =
+                            String(cuerpo.uuid_local).toLowerCase() ===
+                            String(uuid).toLowerCase();
+                    }
+                }
+
 
 
                 if (!confirmado) {

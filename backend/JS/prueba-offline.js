@@ -21,6 +21,45 @@ let guardando = false;
 let formularioGuardado = false;
 
 
+let guardandoTransferencia = false;
+let transferenciaGuardada = false;
+
+
+function claveBorradorTransferencia() {
+    return `finanzas_transferencia_borrador_${usuarioId}`;
+}
+
+
+function obtenerOCrearBorradorTransferencia() {
+    let borrador;
+
+    try {
+        borrador = JSON.parse(
+            localStorage.getItem(
+                claveBorradorTransferencia()
+            )
+        );
+    } catch {
+        borrador = null;
+    }
+
+    if (!borrador || !borrador.uuid) {
+        borrador = {
+            uuid: crypto.randomUUID(),
+            guardado: false
+        };
+
+        localStorage.setItem(
+            claveBorradorTransferencia(),
+            JSON.stringify(borrador)
+        );
+    }
+
+    return borrador;
+}
+
+
+
 let erroresVisibles = [];
 
 
@@ -103,6 +142,7 @@ function fechaLocalHoy() {
 
 
 elemento("fecha").value = fechaLocalHoy();
+elemento("fechaTransferencia").value = fechaLocalHoy();
 
 
 
@@ -111,7 +151,10 @@ async function mostrarCola() {
 
     const operacionesUsuario = todas.filter(op =>
         op.usuario_id === usuarioId &&
-        op.tipo_operacion === "MOVIMIENTO_NORMAL"
+        [
+            "MOVIMIENTO_NORMAL",
+            "TRANSFERENCIA"
+        ].includes(op.tipo_operacion)
     );
 
     elemento("cola").textContent = JSON.stringify(
@@ -137,6 +180,7 @@ async function mostrarCola() {
         opcion.value = operacion.uuid_operacion;
 
         opcion.textContent =
+            `${operacion.tipo_operacion} — ` +
             `${operacion.datos?.monto ?? "?"} — ` +
             `${operacion.ultimo_error ?? "Sin detalle"}`;
 
@@ -177,6 +221,8 @@ elemento("login").addEventListener(
             elemento("probar401").disabled = true;
             elemento("probarRespuestaPerdida").disabled = true;
             elemento("crear422").disabled = true;
+            elemento("guardarTransferencia").disabled = true;
+            elemento("nuevaTransferencia").disabled = true;
 
             const formulario = new URLSearchParams({
                 username: elemento("email").value.trim(),
@@ -261,6 +307,57 @@ elemento("login").addEventListener(
 
                 selector.appendChild(opcion);
             }
+
+            // Cargar cuentas para las transferencias.
+            const selectorOrigen = elemento(
+                "cuentaOrigenTransferencia"
+            );
+
+            const selectorDestino = elemento(
+                "cuentaDestinoTransferencia"
+            );
+
+            selectorOrigen.replaceChildren();
+            selectorDestino.replaceChildren();
+
+            for (const cuenta of cuentasActivas) {
+
+                const opcionOrigen = document.createElement("option");
+                opcionOrigen.value = cuenta.id_cuenta;
+                opcionOrigen.textContent = cuenta.nombre_cuenta;
+
+                const opcionDestino = document.createElement("option");
+                opcionDestino.value = cuenta.id_cuenta;
+                opcionDestino.textContent = cuenta.nombre_cuenta;
+
+                selectorOrigen.appendChild(opcionOrigen);
+                selectorDestino.appendChild(opcionDestino);
+            }
+
+            // Seleccionar dos cuentas distintas inicialmente.
+            if (cuentasActivas.length >= 2) {
+                selectorOrigen.value = String(
+                    cuentasActivas[0].id_cuenta
+                );
+
+                selectorDestino.value = String(
+                    cuentasActivas[1].id_cuenta
+                );
+            }
+
+            // Recuperar el borrador de transferencia.
+            const borradorTransferencia =
+                obtenerOCrearBorradorTransferencia();
+
+            transferenciaGuardada =
+                borradorTransferencia.guardado;
+
+            elemento("guardarTransferencia").disabled =
+                cuentasActivas.length < 2 || transferenciaGuardada;
+
+            elemento("nuevaTransferencia").disabled =
+                cuentasActivas.length < 2 || !transferenciaGuardada;
+
 
             const borrador = obtenerOCrearBorrador();
 
@@ -583,14 +680,19 @@ elemento("probarRespuestaPerdida").addEventListener(
 
                 // Dejar que FastAPI complete la operación,
                 // pero simular la pérdida de confirmación.
+
                 if (
-                    url.includes("/movimientos/normales") &&
+                    (
+                        url.includes("/movimientos/normales") ||
+                        url.includes("/transferencias/")
+                    ) &&
                     respuesta.ok
                 ) {
                     throw new TypeError(
                         "Simulación: confirmación perdida"
                     );
                 }
+
 
                 return respuesta;
             };
@@ -794,5 +896,216 @@ elemento("crear422").addEventListener(
         } finally {
             elemento("crear422").disabled = !usuarioId;
         }
+    }
+);
+
+// -----------------------------------
+// GUARDAR TRANSFERENCIA OFFLINE
+// -----------------------------------
+
+elemento("guardarTransferencia").addEventListener(
+    "click",
+    async () => {
+
+        if (
+            !usuarioId ||
+            guardandoTransferencia ||
+            transferenciaGuardada
+        ) {
+            return;
+        }
+
+        guardandoTransferencia = true;
+        elemento("guardarTransferencia").disabled = true;
+
+        try {
+            const origen = Number(
+                elemento("cuentaOrigenTransferencia").value
+            );
+
+            const destino = Number(
+                elemento("cuentaDestinoTransferencia").value
+            );
+
+            const monto = elemento(
+                "montoTransferencia"
+            ).value;
+
+            const fecha = elemento(
+                "fechaTransferencia"
+            ).value;
+
+            const motivo = elemento(
+                "motivoTransferencia"
+            ).value.trim();
+
+            const aplicaGMF = elemento(
+                "aplicaGMFTransferencia"
+            ).checked;
+
+            // Validar cuentas.
+            if (
+                !Number.isInteger(origen) ||
+                !Number.isInteger(destino) ||
+                origen <= 0 ||
+                destino <= 0
+            ) {
+                throw new Error(
+                    "Selecciona dos cuentas válidas."
+                );
+            }
+
+            if (origen === destino) {
+                throw new Error(
+                    "La cuenta origen y destino deben ser distintas."
+                );
+            }
+
+            // Validación de monto: positivo
+            // y máximo dos decimales.
+            const montoValido =
+                /^(?:0|[1-9]\d{0,12})(?:\.\d{1,2})?$/.test(monto) &&
+                Number(monto) > 0;
+
+            if (!montoValido) {
+                throw new Error(
+                    "Monto inválido. Usa máximo dos decimales."
+                );
+            }
+
+            if (
+                !/^\d{4}-\d{2}-\d{2}$/.test(fecha) ||
+                fecha > fechaLocalHoy()
+            ) {
+                throw new Error(
+                    "Selecciona una fecha válida, no futura."
+                );
+            }
+
+            if (motivo.length > 255) {
+                throw new Error(
+                    "El motivo no puede superar 255 caracteres."
+                );
+            }
+
+            const borrador =
+                obtenerOCrearBorradorTransferencia();
+
+            const uuid = borrador.uuid;
+
+            // JSON esperado por FastAPI.
+            const datos = {
+                uuid_operacion: uuid,
+                id_cuenta_origen: origen,
+                id_cuenta_destino: destino,
+                monto: monto,
+                fecha_transferencia: fecha,
+                motivo: motivo || null,
+                aplica_gmf: aplicaGMF
+            };
+
+            const existentes =
+                await obtenerOperacionesLocales();
+
+            const existente = existentes.find(
+                op => op.uuid_operacion === uuid
+            );
+
+            if (existente) {
+
+                if (
+                    existente.usuario_id !== usuarioId ||
+                    existente.tipo_operacion !== "TRANSFERENCIA" ||
+                    JSON.stringify(existente.datos) !==
+                    JSON.stringify(datos)
+                ) {
+                    throw new Error(
+                        "Este UUID ya corresponde a " +
+                        "otra operación. No se sobrescribirá."
+                    );
+                }
+
+                informar(
+                    "La transferencia ya estaba guardada localmente."
+                );
+
+            } else {
+
+                await guardarOperacionPendiente({
+                    uuid_operacion: uuid,
+                    usuario_id: usuarioId,
+                    tipo_operacion: "TRANSFERENCIA",
+                    datos: datos
+                });
+
+                informar(
+                    "Transferencia guardada en IndexedDB. " +
+                    "UUID: " + uuid
+                );
+            }
+
+            transferenciaGuardada = true;
+
+            localStorage.setItem(
+                claveBorradorTransferencia(),
+                JSON.stringify({
+                    uuid: uuid,
+                    guardado: true
+                })
+            );
+
+            elemento("nuevaTransferencia").disabled = false;
+
+            await mostrarCola();
+
+        } catch (error) {
+            informar(
+                "ERROR DE TRANSFERENCIA: " +
+                error.message
+            );
+
+        } finally {
+            guardandoTransferencia = false;
+
+            elemento("guardarTransferencia").disabled =
+                !usuarioId ||
+                transferenciaGuardada ||
+                !elemento("cuentaOrigenTransferencia").value ||
+                !elemento("cuentaDestinoTransferencia").value;
+        }
+    }
+);
+
+// -----------------------------------
+// PREPARAR UNA NUEVA TRANSFERENCIA
+// -----------------------------------
+
+elemento("nuevaTransferencia").addEventListener(
+    "click",
+    () => {
+
+        if (!usuarioId || guardandoTransferencia) {
+            return;
+        }
+
+        const uuidNuevo = crypto.randomUUID();
+
+        localStorage.setItem(
+            claveBorradorTransferencia(),
+            JSON.stringify({
+                uuid: uuidNuevo,
+                guardado: false
+            })
+        );
+
+        transferenciaGuardada = false;
+
+        elemento("guardarTransferencia").disabled = false;
+        elemento("nuevaTransferencia").disabled = true;
+
+        informar(
+            "Nueva transferencia preparada. " +
+            "UUID: " + uuidNuevo
+        );
     }
 );
