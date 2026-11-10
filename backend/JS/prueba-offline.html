@@ -99,6 +99,20 @@
         <button id="sincronizar" disabled>
             Sincronizar pendientes
         </button>
+
+
+        <h3>4. Pruebas de recuperación</h3>
+
+        <button id="probar401" disabled>
+            Simular sesión expirada (401)
+        </button>
+
+        <button id="probarRespuestaPerdida" disabled>
+            Simular respuesta perdida
+        </button>
+        <button id="crear422" disabled>
+            Crear operación inválida (prueba 422)
+        </button>
     </section>
 
     <h3>Mensajes</h3>
@@ -106,6 +120,26 @@
 
     <h3>Cola local del usuario</h3>
     <pre id="cola">Sin consultar.</pre>
+
+    <section>
+        <h3>5. Operaciones con errores</h3>
+
+        <p>
+            Selecciona una operación rechazada
+            para revisar qué hacer con ella.
+        </p>
+
+        <select id="operacionError"></select>
+
+        <button id="reintentarError" disabled>
+            Preparar reintento
+        </button>
+
+        <button id="descartarError" disabled>
+            Descartar registro local
+        </button>
+    </section>
+
 
     <script type="module" src="prueba-offline.js">
     </script>

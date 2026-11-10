@@ -1,7 +1,8 @@
-
 import {
     guardarOperacionPendiente,
-    obtenerOperacionesLocales
+    obtenerOperacionesLocales,
+    actualizarOperacionLocal,
+    eliminarOperacion
 } from "./offline-db.js";
 
 import {
@@ -19,6 +20,34 @@ let usuarioId = null;
 let guardando = false;
 let formularioGuardado = false;
 
+
+let erroresVisibles = [];
+
+
+function obtenerErrorSeleccionado() {
+    const uuid = elemento("operacionError").value;
+
+    return erroresVisibles.find(
+        op => op.uuid_operacion === uuid
+    );
+}
+
+
+function actualizarBotonesError() {
+    const operacion = obtenerErrorSeleccionado();
+
+    const es422 = String(
+        operacion?.ultimo_error || ""
+    ).startsWith("HTTP 422");
+
+    // Un 422 requiere corregir el contenido.
+    // No sirve reenviar idénticos datos inválidos.
+    elemento("reintentarError").disabled =
+        !operacion || es422;
+
+    elemento("descartarError").disabled =
+        !operacion;
+}
 
 // Cada usuario tiene su propio borrador.
 function claveBorrador() {
@@ -76,6 +105,7 @@ function fechaLocalHoy() {
 elemento("fecha").value = fechaLocalHoy();
 
 
+
 async function mostrarCola() {
     const todas = await obtenerOperacionesLocales();
 
@@ -89,7 +119,45 @@ async function mostrarCola() {
         null,
         2
     );
+
+    // Recuperar únicamente las operaciones
+    // rechazadas del usuario autenticado.
+    erroresVisibles = operacionesUsuario.filter(
+        op => op.estado_sync === "ERROR"
+    );
+
+    const selector = elemento("operacionError");
+    const seleccionAnterior = selector.value;
+
+    selector.replaceChildren();
+
+    for (const operacion of erroresVisibles) {
+        const opcion = document.createElement("option");
+
+        opcion.value = operacion.uuid_operacion;
+
+        opcion.textContent =
+            `${operacion.datos?.monto ?? "?"} — ` +
+            `${operacion.ultimo_error ?? "Sin detalle"}`;
+
+        selector.appendChild(opcion);
+    }
+
+    if (erroresVisibles.some(
+        op => op.uuid_operacion === seleccionAnterior
+    )) {
+        selector.value = seleccionAnterior;
+    }
+
+    actualizarBotonesError();
 }
+
+
+elemento("operacionError").addEventListener(
+    "change",
+    actualizarBotonesError
+);
+
 
 
 // -----------------------------------
@@ -106,6 +174,9 @@ elemento("login").addEventListener(
 
             elemento("guardar").disabled = true;
             elemento("sincronizar").disabled = true;
+            elemento("probar401").disabled = true;
+            elemento("probarRespuestaPerdida").disabled = true;
+            elemento("crear422").disabled = true;
 
             const formulario = new URLSearchParams({
                 username: elemento("email").value.trim(),
@@ -191,17 +262,20 @@ elemento("login").addEventListener(
                 selector.appendChild(opcion);
             }
 
-           const borrador = obtenerOCrearBorrador();
+            const borrador = obtenerOCrearBorrador();
 
-formularioGuardado = borrador.guardado;
+            formularioGuardado = borrador.guardado;
 
-elemento("guardar").disabled =
-    cuentasActivas.length === 0 || formularioGuardado;
+            elemento("guardar").disabled =
+                cuentasActivas.length === 0 || formularioGuardado;
 
-elemento("nuevo").disabled =
-    cuentasActivas.length === 0 || !formularioGuardado;
+            elemento("nuevo").disabled =
+                cuentasActivas.length === 0 || !formularioGuardado;
 
             elemento("sincronizar").disabled = false;
+            elemento("probar401").disabled = false;
+            elemento("probarRespuestaPerdida").disabled = false;
+            elemento("crear422").disabled = false;
 
             informar(
                 `Autenticado: ${perfil.email} ` +
@@ -253,6 +327,19 @@ elemento("guardar").addEventListener(
             );
 
             const monto = elemento("monto").value;
+
+            const montoValido =
+                /^(?:0|[1-9]\d{0,12})(?:\.\d{1,2})?$/.test(monto) &&
+                Number(monto) > 0;
+
+            if (!montoValido) {
+                throw new Error(
+                    "El monto debe ser positivo y tener " +
+                    "máximo dos decimales. " +
+                    "Ejemplo: 1000000.00"
+                );
+            }
+
 
             if (
                 !Number.isInteger(idCuenta) ||
@@ -413,5 +500,299 @@ elemento("nuevo").addEventListener(
             "Nueva operación preparada. " +
             "Ahora puedes registrar otro gasto."
         );
+    }
+);
+
+
+// -----------------------------------
+// PRUEBA: TOKEN INVÁLIDO / 401
+// -----------------------------------
+
+elemento("probar401").addEventListener(
+    "click",
+    async () => {
+        if (!usuarioId) {
+            informar("Primero debes iniciar sesión.");
+            return;
+        }
+
+        elemento("probar401").disabled = true;
+
+        try {
+            informar(
+                "PRUEBA 401: enviando con token inválido..."
+            );
+
+            const resumen = await sincronizarPendientes({
+                token: "token-invalido-de-prueba",
+                usuarioId: usuarioId,
+                onEvento: informar
+            });
+
+            informar(
+                "Resultado prueba 401: " +
+                JSON.stringify(resumen)
+            );
+
+            await mostrarCola();
+
+        } catch (error) {
+            informar(
+                "ERROR DE PRUEBA 401: " + error.message
+            );
+
+        } finally {
+            elemento("probar401").disabled = !usuarioId;
+        }
+    }
+);
+
+// -----------------------------------
+// PRUEBA: CONFIRMACIÓN PERDIDA
+// -----------------------------------
+
+elemento("probarRespuestaPerdida").addEventListener(
+    "click",
+    async () => {
+
+        if (!usuarioId || !tokenActual) {
+            informar("Primero debes iniciar sesión.");
+            return;
+        }
+
+        elemento("probarRespuestaPerdida").disabled = true;
+
+        // Guardar fetch original para restaurarlo.
+        const fetchOriginal = window.fetch;
+
+        try {
+            informar(
+                "PRUEBA: el servidor registrará el gasto, " +
+                "pero simularemos una respuesta perdida."
+            );
+
+            // Interceptor temporal SOLO PARA ESTA PRUEBA.
+            window.fetch = async (...argumentos) => {
+
+                const respuesta = await fetchOriginal.apply(
+                    window,
+                    argumentos
+                );
+
+                const url = String(argumentos[0]);
+
+                // Dejar que FastAPI complete la operación,
+                // pero simular la pérdida de confirmación.
+                if (
+                    url.includes("/movimientos/normales") &&
+                    respuesta.ok
+                ) {
+                    throw new TypeError(
+                        "Simulación: confirmación perdida"
+                    );
+                }
+
+                return respuesta;
+            };
+
+            const resumen = await sincronizarPendientes({
+                token: tokenActual,
+                usuarioId: usuarioId,
+                onEvento: informar
+            });
+
+            informar(
+                "Resultado primera solicitud: " +
+                JSON.stringify(resumen)
+            );
+
+            await mostrarCola();
+
+        } catch (error) {
+            informar(
+                "ERROR DE PRUEBA: " + error.message
+            );
+
+        } finally {
+
+            // Restaurar inmediatamente el navegador.
+            window.fetch = fetchOriginal;
+
+            elemento("probarRespuestaPerdida").disabled =
+                !usuarioId;
+        }
+    }
+);
+
+
+// -----------------------------------
+// REINTENTAR OPERACIÓN RECHAZADA
+// -----------------------------------
+
+elemento("reintentarError").addEventListener(
+    "click",
+    async () => {
+        const operacion = obtenerErrorSeleccionado();
+
+        if (
+            !operacion ||
+            operacion.usuario_id !== usuarioId ||
+            operacion.estado_sync !== "ERROR"
+        ) {
+            return;
+        }
+
+        if (String(operacion.ultimo_error).startsWith(
+            "HTTP 422"
+        )) {
+            informar(
+                "Los datos inválidos no pueden reenviarse " +
+                "sin corregirlos."
+            );
+            return;
+        }
+
+        try {
+            await actualizarOperacionLocal(
+                operacion.uuid_operacion,
+                {
+                    estado_sync: "PENDIENTE",
+                    ultimo_error: null
+                }
+            );
+
+            informar(
+                "Operación preparada para reintentar. " +
+                "Se conservaron el UUID, la cuenta, " +
+                "el monto y los demás datos originales."
+            );
+
+            await mostrarCola();
+
+        } catch (error) {
+            informar(
+                "Error al preparar reintento: " +
+                error.message
+            );
+        }
+    }
+);
+
+// -----------------------------------
+// DESCARTAR OPERACIÓN LOCAL RECHAZADA
+// -----------------------------------
+
+elemento("descartarError").addEventListener(
+    "click",
+    async () => {
+        const operacion = obtenerErrorSeleccionado();
+
+        if (
+            !operacion ||
+            operacion.usuario_id !== usuarioId ||
+            operacion.estado_sync !== "ERROR"
+        ) {
+            return;
+        }
+
+        const confirmar = window.confirm(
+            "¿Descartar esta operación de IndexedDB?\n\n" +
+            "UUID: " + operacion.uuid_operacion + "\n\n" +
+            "Se eliminará únicamente la copia local.\n" +
+            "Esto NO anula movimientos de PostgreSQL.\n\n" +
+            "Antes de descartarla, verifica que no " +
+            "se haya registrado en el servidor."
+        );
+
+        if (!confirmar) {
+            return;
+        }
+
+        try {
+            await eliminarOperacion(
+                operacion.uuid_operacion
+            );
+
+            informar(
+                "Registro local descartado: " +
+                operacion.uuid_operacion
+            );
+
+            informar(
+                "Si necesitas registrar otro gasto, " +
+                "pulsa 'Nueva operación'."
+            );
+
+            await mostrarCola();
+
+        } catch (error) {
+            informar(
+                "Error al descartar: " +
+                error.message
+            );
+        }
+    }
+);
+
+// -----------------------------------
+// PRUEBA CONTROLADA DE ERROR 422
+// -----------------------------------
+
+elemento("crear422").addEventListener(
+    "click",
+    async () => {
+
+        if (!usuarioId) {
+            informar("Primero debes iniciar sesión.");
+            return;
+        }
+
+        elemento("crear422").disabled = true;
+
+        try {
+            const uuid = crypto.randomUUID();
+
+            await guardarOperacionPendiente({
+                uuid_operacion: uuid,
+                usuario_id: usuarioId,
+                tipo_operacion: "MOVIMIENTO_NORMAL",
+
+                datos: {
+                    uuid_local: uuid,
+
+                    id_cuenta: Number(
+                        elemento("cuenta").value
+                    ),
+
+                    id_categoria: Number(
+                        elemento("categoria").value
+                    ),
+
+                    tipo: "GASTO",
+                    monto: "100.00",
+
+                    // Intencionalmente inválido.
+                    fecha_movimiento: "FECHA_INVALIDA",
+
+                    descripcion: "PRUEBA CONTROLADA 422"
+                }
+            });
+
+            informar(
+                "Prueba 422 creada localmente. UUID: " +
+                uuid
+            );
+
+            await mostrarCola();
+
+        } catch (error) {
+            informar(
+                "Error al crear prueba 422: " +
+                error.message
+            );
+
+        } finally {
+            elemento("crear422").disabled = !usuarioId;
+        }
     }
 );

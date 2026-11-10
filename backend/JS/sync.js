@@ -14,13 +14,33 @@ const RUTAS = {
     ABONO_OBLIGACION: "/obligaciones/abonos"
 };
 
+function describirErrorHTTP(cuerpo) {
+    const detalle = cuerpo?.detail;
+
+    if (typeof detalle === "string") {
+        return detalle;
+    }
+
+    if (Array.isArray(detalle)) {
+        return detalle.map(error => {
+            const campo = Array.isArray(error.loc)
+                ? error.loc.join(".")
+                : "datos";
+
+            return `${campo}: ${error.msg || "Valor inválido"}`;
+        }).join(" | ");
+    }
+
+    return "La operación fue rechazada";
+}
+
 let sincronizando = false;
 
 
 export async function sincronizarPendientes({
     token,
     usuarioId,
-    onEvento = () => {}
+    onEvento = () => { }
 }) {
     if (!token || !usuarioId) {
         throw new Error(
@@ -63,13 +83,24 @@ export async function sincronizarPendientes({
 
             // No avanzar sobre un error anterior:
             // otra operación puede depender de él.
+
             if (operacion.estado_sync === "ERROR") {
                 onEvento(
-                    "Hay una operación con ERROR pendiente de revisión"
+                    "Sincronización detenida: existe una operación " +
+                    "anterior que requiere revisión.\n" +
+                    "UUID: " + operacion.uuid_operacion + "\n" +
+                    "Motivo: " + (
+                        operacion.ultimo_error ||
+                        "Error no especificado"
+                    ) + "\n" +
+                    "Revisa o descarta esa operación antes " +
+                    "de continuar con las siguientes."
                 );
+
                 resumen.errores++;
                 break;
             }
+
 
             const uuid = operacion.uuid_operacion;
 
@@ -120,17 +151,25 @@ export async function sincronizarPendientes({
                     String(cuerpo[campoUuid]).toLowerCase() ===
                     String(uuid).toLowerCase();
 
+
                 if (!confirmado) {
                     await actualizarOperacionLocal(uuid, {
-                        estado_sync: "ERROR",
+                        estado_sync: "PENDIENTE",
                         ultimo_error:
-                            "Respuesta inesperada del servidor"
+                            "El servidor respondió, pero no fue posible " +
+                            "confirmar la operación."
                     });
 
-                    onEvento("Respuesta inesperada de FastAPI");
-                    resumen.errores++;
+                    onEvento(
+                        "Confirmación no verificable. " +
+                        "La operación se conserva para reintentar " +
+                        "con el mismo UUID."
+                    );
+
+                    resumen.pendientes++;
                     break;
                 }
+
 
                 // Confirmación válida del backend.
                 await eliminarOperacion(uuid);
@@ -168,7 +207,7 @@ export async function sincronizarPendientes({
                     estado_sync: "ERROR",
                     ultimo_error:
                         `HTTP ${respuesta.status}: ` +
-                        String(cuerpo.detail || "Revisar operación")
+                        describirErrorHTTP(cuerpo)
                 });
 
                 onEvento(
