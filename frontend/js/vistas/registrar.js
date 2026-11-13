@@ -1,6 +1,15 @@
 import { obtenerMisCuentas, obtenerCategorias, crearMovimientoNormal, ErrorDeRed } from '../api.js';
 import { guardarOffline } from '../offline.js';
-import { cop, esc, icono, hoyISO, nuevoUUID, aviso, leerCache } from '../util.js';
+import {
+  cop,
+  esc,
+  icono,
+  hoyISO,
+  nuevoUUID,
+  aviso,
+  leerCache,
+  guardarCache
+} from '../util.js';
 
 export async function render(c) {
   const estado = { tipo: 'GASTO', categoria: null };
@@ -21,7 +30,6 @@ export async function render(c) {
           <input id="mov-monto" name="monto" inputmode="numeric" autocomplete="off" placeholder="$ 0" required>
         </div>
       </header>
-
       <div class="cuerpo-form">
         <div class="campo">
           <label for="mov-cuenta">Cuenta</label>
@@ -30,15 +38,24 @@ export async function render(c) {
         <div class="campo">
           <label for="mov-fecha">Fecha</label>
           <input id="mov-fecha" name="fecha" type="date" max="${hoyISO()}" value="${hoyISO()}" required>
-        </div>
-        <fieldset class="campo">
-          <legend>Categoría</legend>
-          <div class="chips" id="chips"></div>
-        </fieldset>
+        </div> 
         <div class="campo">
           <label for="mov-desc">Descripción <span class="opcional">opcional</span></label>
           <input id="mov-desc" name="descripcion" maxlength="255" placeholder="Ej. almuerzo con el equipo">
         </div>
+        
+<fieldset class="campo">
+  <legend>Categoría</legend>
+
+  <div class="chips" id="chips"></div>
+
+  <p
+    id="aviso-categorias"
+    class="nota"
+    aria-live="polite"
+  ></p>
+</fieldset>
+
         <div class="gmf" id="gmf">
           <div class="gmf-fila">
             <input id="mov-gmf" type="checkbox" disabled>
@@ -48,7 +65,6 @@ export async function render(c) {
         </div>
         <p class="error-form" id="mov-error" role="alert"></p>
       </div>
-
       <div class="pie-form">
         <small>Si no tienes conexión, se guarda en el celular y se envía después.</small>
         <button class="btn btn-primario" type="submit">Guardar movimiento</button>
@@ -59,7 +75,75 @@ export async function render(c) {
   const monto = c.querySelector('#mov-monto');
   const error = c.querySelector('#mov-error');
   const selectCuenta = c.querySelector('#mov-cuenta');
-  const categorias = await obtenerCategorias();
+
+  let categorias = [];
+
+  const avisoCategorias = c.querySelector(
+    '#aviso-categorias'
+  );
+
+  try {
+    // Primero intentamos obtener las categorías
+    // actualizadas desde PostgreSQL.
+    const respuesta = await obtenerCategorias();
+
+    if (!Array.isArray(respuesta)) {
+      throw new Error(
+        'El servidor devolvió un formato de categorías inválido.'
+      );
+    }
+
+    categorias = respuesta.filter(cat =>
+      cat.estado === 'ACTIVA' &&
+      ['GASTO', 'INGRESO'].includes(cat.tipo_categoria) &&
+      Number.isSafeInteger(Number(cat.id_categoria)) &&
+      Number(cat.id_categoria) > 0
+    );
+
+    // La caché ya está separada por usuario
+    // desde el paso 21.2.
+    guardarCache('categorias', categorias);
+
+    avisoCategorias.textContent = '';
+
+  } catch (e) {
+
+    // Solo utilizamos caché cuando existe un
+    // problema de conexión, no ante errores
+    // de autorización o validación del servidor.
+    if (e instanceof ErrorDeRed) {
+
+      const cache = leerCache('categorias');
+
+      if (Array.isArray(cache?.datos)) {
+
+        categorias = cache.datos.filter(cat =>
+          cat.estado === 'ACTIVA' &&
+          ['GASTO', 'INGRESO'].includes(cat.tipo_categoria)
+        );
+
+        avisoCategorias.textContent =
+          'Sin conexión: estás utilizando las últimas ' +
+          'categorías guardadas. Algunas podrían haber ' +
+          'cambiado en el servidor.';
+
+      } else {
+
+        avisoCategorias.textContent =
+          'No hay conexión ni categorías guardadas. ' +
+          'Conéctate para descargarlas.';
+
+      }
+
+    } else {
+
+      avisoCategorias.textContent =
+        'No fue posible consultar las categorías: ' +
+        e.message;
+
+    }
+  }
+
 
   // Monto con separador de miles mientras se escribe: 85000 → $ 85.000
   monto.addEventListener('input', () => {
@@ -71,11 +155,57 @@ export async function render(c) {
     c.querySelectorAll('.segmento button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tipo === estado.tipo)));
     c.querySelector('#banda-mov').classList.toggle('banda-oscura', estado.tipo === 'INGRESO');
     c.querySelector('#gmf').hidden = estado.tipo !== 'GASTO';
-    const lista = categorias.filter((x) => x.tipo_categoria === estado.tipo);
-    if (!lista.some((x) => x.id_categoria === estado.categoria)) estado.categoria = lista[0]?.id_categoria ?? null;
-    c.querySelector('#chips').innerHTML = lista.map((x) => `
-      <button type="button" class="chip" data-id="${x.id_categoria}" aria-pressed="${x.id_categoria === estado.categoria}">${esc(x.nombre_categoria)}</button>`).join('');
+
+    const lista = categorias.filter(cat =>
+      cat.tipo_categoria === estado.tipo &&
+      cat.estado === 'ACTIVA' &&
+      Number.isSafeInteger(Number(cat.id_categoria)) &&
+      Number(cat.id_categoria) > 0
+    );
+
+    // Mantener la categoría seleccionada si todavía
+    // existe en la lista del tipo actual.
+    if (!lista.some(cat =>
+      Number(cat.id_categoria) === Number(estado.categoria)
+    )) {
+      estado.categoria = lista.length
+        ? Number(lista[0].id_categoria)
+        : null;
+    }
+
+    const chips = c.querySelector('#chips');
+
+    if (lista.length === 0) {
+
+      chips.innerHTML = `
+    <p class="vacio">
+      No hay categorías disponibles para
+      ${estado.tipo === 'GASTO' ? 'gastos' : 'ingresos'}.
+    </p>
+  `;
+
+    } else {
+
+      chips.innerHTML = lista.map(cat => {
+
+        const id = Number(cat.id_categoria);
+
+        return `
+      <button
+        type="button"
+        class="chip"
+        data-id="${id}"
+        aria-pressed="${id === estado.categoria}"
+      >
+        ${esc(cat.nombre_categoria)}
+      </button>
+    `;
+
+      }).join('');
+
+    }
   }
+
 
   c.querySelector('.segmento').addEventListener('click', (ev) => {
     const b = ev.target.closest('button[data-tipo]');

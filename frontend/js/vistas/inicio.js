@@ -61,6 +61,23 @@ export async function render(c) {
 
 </section>
 
+<section class="seccion">
+
+  <div class="seccion-titulo">
+    <h2>Categorías financieras</h2>
+
+    <a href="#/categorias">
+      Administrar
+    </a>
+  </div>
+
+  <p class="nota">
+    Organiza tus ingresos y gastos
+    mediante categorías personalizadas.
+  </p>
+
+</section>
+
 
     <section class="seccion">
       <div class="tarjeta-gris" id="resumen">

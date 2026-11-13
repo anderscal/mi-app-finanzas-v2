@@ -326,3 +326,7 @@ dialog.hoja::backdrop { background: rgba(20, 32, 28, 0.45); }
 .enlace:disabled { color: var(--tenue); opacity: .6; }
 .confirmar-descarte { font-size: 12px; color: #6B2A08; }
 a.pildora-oro { text-decoration: none; }
+
+.gmf[hidden] {
+  display: none !important;
+}

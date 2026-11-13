@@ -16,7 +16,7 @@ import * as movimientos from './vistas/movimientos.js';
 import * as deudas from './vistas/deudas.js';
 import * as metas from './vistas/metas.js';
 import * as asistente from './vistas/asistente.js';
-
+import * as categorias from './vistas/categorias.js';
 
 // publica: no exige sesión. nav: pestaña activa (null = sin barra inferior).
 const RUTAS = {
@@ -32,6 +32,10 @@ const RUTAS = {
   '/deudas': { vista: deudas, nav: 'deudas' },
   '/metas': { vista: metas, nav: 'metas' },
   '/asistente': { vista: asistente, nav: 'asistente' },
+  '/categorias': {
+    vista: categorias,
+    nav: null
+  },
 
 };
 

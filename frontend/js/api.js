@@ -202,7 +202,56 @@ export function obtenerPlanificacion() {
   return solicitar('/consultas/planificacion');
 }
 
-// TEMPORAL hasta que exista GET /categorias
-export async function obtenerCategorias() {
-  return CONFIG.CATEGORIAS_TEMPORALES;
+
+/**
+ * GET /categorias/
+ *
+ * Devuelve las categorías activas:
+ * - Categorías del sistema.
+ * - Categorías personales del usuario autenticado.
+ */
+export function obtenerCategorias() {
+  return solicitar('/categorias/');
 }
+
+
+/**
+ * POST /categorias/
+ * Crea una categoría personal.
+ */
+export function crearCategoriaFinanciera(datos) {
+  return solicitar('/categorias/', {
+    metodo: 'POST',
+    json: datos
+  });
+}
+
+
+/**
+ * PATCH /categorias/{id_categoria}
+ * Actualiza el nombre de una categoría personal.
+ */
+export function actualizarCategoriaFinanciera(
+  idCategoria,
+  datos
+) {
+  return solicitar(`/categorias/${idCategoria}`, {
+    metodo: 'PATCH',
+    json: datos
+  });
+}
+
+
+/**
+ * POST /categorias/{id_categoria}/desactivar
+ * Desactiva lógicamente una categoría personal.
+ */
+export function desactivarCategoriaFinanciera(idCategoria) {
+  return solicitar(
+    `/categorias/${idCategoria}/desactivar`,
+    {
+      metodo: 'POST'
+    }
+  );
+}
+
