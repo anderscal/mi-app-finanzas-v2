@@ -17,7 +17,7 @@ from app.persistence.obligacion_escritura_repository import (
 
 
 def recalcular_estado_obligacion(
-    db: Session,
+    db: Sessio,
     obligacion
 ):
     if obligacion.tipo_obligacion == "POR_PAGAR":

@@ -1,3 +1,4 @@
+
 from decimal import Decimal
 
 from fastapi import HTTPException
@@ -47,10 +48,7 @@ def calcular_pendiente(
     )
 
     abonado = sum(
-        (
-            movimiento.monto
-            for movimiento in movimientos
-        ),
+        (movimiento.monto for movimiento in movimientos),
         Decimal("0.00")
     )
 
@@ -61,18 +59,16 @@ def misma_operacion(
     movimiento: Movimiento,
     datos: AbonoObligacionCrear,
     tipo: str
-):
+) -> bool:
+
     return (
         movimiento.id_cuenta == datos.id_cuenta
-        and movimiento.id_obligacion
-        == datos.id_obligacion
+        and movimiento.id_obligacion == datos.id_obligacion
         and movimiento.tipo == tipo
         and movimiento.origen == "OBLIGACION"
         and movimiento.monto == datos.monto
-        and movimiento.fecha_movimiento
-        == datos.fecha_movimiento
-        and movimiento.descripcion
-        == datos.descripcion
+        and movimiento.fecha_movimiento == datos.fecha_movimiento
+        and movimiento.descripcion == datos.descripcion
     )
 
 
@@ -81,9 +77,13 @@ def registrar_abono_obligacion(
     id_usuario: int,
     datos: AbonoObligacionCrear
 ):
+
     try:
 
-        # 1. Bloquear obligación
+        # ---------------------------------------
+        # 1. BLOQUEAR Y AUTORIZAR LA OBLIGACION
+        # ---------------------------------------
+
         obligacion = bloquear_obligacion(
             db,
             datos.id_obligacion,
@@ -96,13 +96,10 @@ def registrar_abono_obligacion(
                 detail="Obligación no encontrada"
             )
 
-        if obligacion.estado != "ACTIVA":
-            raise HTTPException(
-                status_code=409,
-                detail="La obligación no está activa"
-            )
+        # ---------------------------------------
+        # 2. DETERMINAR EL TIPO DE MOVIMIENTO
+        # ---------------------------------------
 
-        # 2. Determinar dirección del movimiento
         if obligacion.tipo_obligacion == "POR_PAGAR":
             tipo_movimiento = "GASTO"
 
@@ -115,7 +112,10 @@ def registrar_abono_obligacion(
                 detail="Tipo de obligación no válido"
             )
 
-        # 3. Revisar idempotencia
+        # ---------------------------------------
+        # 3. IDEMPOTENCIA ANTES DEL ESTADO
+        # ---------------------------------------
+
         existente = buscar_movimiento_obligacion_uuid(
             db,
             datos.uuid_local
@@ -133,42 +133,42 @@ def registrar_abono_obligacion(
                     detail="UUID utilizado por otra operación"
                 )
 
+            # Incluso si la obligación ya quedó
+            # SALDADA, reconocemos este mismo abono.
             pendiente = calcular_pendiente(
                 db,
                 obligacion
             )
 
             resultado = {
-                "id_movimiento":
-                    existente.id_movimiento,
-
-                "id_obligacion":
-                    obligacion.id_obligacion,
-
-                "uuid_local":
-                    existente.uuid_local,
-
-                "tipo":
-                    existente.tipo,
-
-                "monto":
-                    existente.monto,
-
-                "monto_pendiente":
-                    pendiente,
-
-                "creado":
-                    False,
-
-                "mensaje":
-                    "Abono previamente registrado"
+                "id_movimiento": existente.id_movimiento,
+                "id_obligacion": obligacion.id_obligacion,
+                "uuid_local": existente.uuid_local,
+                "tipo": existente.tipo,
+                "monto": existente.monto,
+                "monto_pendiente": pendiente,
+                "creado": False,
+                "mensaje": "Abono previamente registrado",
             }
 
             db.rollback()
 
             return resultado
 
-        # 4. Bloquear cuenta
+        # ---------------------------------------
+        # 4. VALIDAR ESTADO PARA ABONOS NUEVOS
+        # ---------------------------------------
+
+        if obligacion.estado != "ACTIVA":
+            raise HTTPException(
+                status_code=409,
+                detail="La obligación no está activa"
+            )
+
+        # ---------------------------------------
+        # 5. BLOQUEAR Y AUTORIZAR LA CUENTA
+        # ---------------------------------------
+
         cuenta = bloquear_cuenta_obligacion(
             db,
             datos.id_cuenta,
@@ -187,13 +187,16 @@ def registrar_abono_obligacion(
                 detail="La cuenta está inactiva"
             )
 
-        # 5. Calcular pendiente
+        # ---------------------------------------
+        # 6. COMPROBAR MONTO PENDIENTE
+        # ---------------------------------------
+
         pendiente_actual = calcular_pendiente(
             db,
             obligacion
         )
 
-        if pendiente_actual <= 0:
+        if pendiente_actual <= Decimal("0.00"):
             raise HTTPException(
                 status_code=409,
                 detail="La obligación ya está saldada"
@@ -202,12 +205,13 @@ def registrar_abono_obligacion(
         if datos.monto > pendiente_actual:
             raise HTTPException(
                 status_code=409,
-                detail=(
-                    "El abono supera el monto pendiente"
-                )
+                detail="El abono supera el monto pendiente"
             )
 
-        # 6. Si es POR_PAGAR, comprobar saldo
+        # ---------------------------------------
+        # 7. COMPROBAR SALDO PARA PAGOS
+        # ---------------------------------------
+
         if tipo_movimiento == "GASTO":
 
             saldo = calcular_saldo_cuenta(
@@ -221,36 +225,24 @@ def registrar_abono_obligacion(
                     detail="Saldo insuficiente"
                 )
 
-        # 7. Crear movimiento
+        # ---------------------------------------
+        # 8. CREAR EL MOVIMIENTO
+        # ---------------------------------------
+
         movimiento = Movimiento(
             uuid_local=datos.uuid_local,
-
             id_cuenta=datos.id_cuenta,
-
             id_categoria=None,
-
             id_transferencia=None,
-
-            id_obligacion=
-                obligacion.id_obligacion,
-
+            id_obligacion=obligacion.id_obligacion,
             tipo=tipo_movimiento,
-
             origen="OBLIGACION",
-
             monto=datos.monto,
-
-            fecha_movimiento=
-                datos.fecha_movimiento,
-
-            descripcion=
-                datos.descripcion,
-
+            fecha_movimiento=datos.fecha_movimiento,
+            descripcion=datos.descripcion,
             aplica_gmf=False,
-
             monto_gmf=Decimal("0.00"),
-
-            estado="ACTIVO"
+            estado="ACTIVO",
         )
 
         agregar_movimiento_obligacion(
@@ -258,48 +250,38 @@ def registrar_abono_obligacion(
             movimiento
         )
 
+        # ---------------------------------------
+        # 9. ACTUALIZAR ESTADO DE LA OBLIGACION
+        # ---------------------------------------
+
         nuevo_pendiente = (
-            pendiente_actual - datos.monto 
+            pendiente_actual - datos.monto
         )
+
         if nuevo_pendiente == Decimal("0.00"):
             obligacion.estado = "SALDADA"
 
+        # ---------------------------------------
+        # 10. CONFIRMAR TRANSACCION
+        # ---------------------------------------
+
         resultado = {
-    "id_movimiento":
-        movimiento.id_movimiento,
-
-    "id_obligacion":
-        obligacion.id_obligacion,
-
-    "uuid_local":
-        movimiento.uuid_local,
-
-    "tipo":
-        movimiento.tipo,
-
-    "monto":
-        movimiento.monto,
-
-    "monto_pendiente":
-        nuevo_pendiente,
-
-    "creado":
-        True,
-
-    "mensaje":
-        "Abono registrado correctamente"
-}
+            "id_movimiento": movimiento.id_movimiento,
+            "id_obligacion": obligacion.id_obligacion,
+            "uuid_local": movimiento.uuid_local,
+            "tipo": movimiento.tipo,
+            "monto": movimiento.monto,
+            "monto_pendiente": nuevo_pendiente,
+            "creado": True,
+            "mensaje": "Abono registrado correctamente",
+        }
 
         db.commit()
 
         return resultado
 
-    except IntegrityError as error:
+    except IntegrityError:
         db.rollback()
-
-        print("\n=== ERROR POSTGRESQL ===")
-        print(error.orig)
-        print("========================\n")
 
         raise HTTPException(
             status_code=409,

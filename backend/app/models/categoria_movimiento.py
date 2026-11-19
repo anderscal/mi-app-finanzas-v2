@@ -12,22 +12,13 @@ class CategoriaMovimiento(Base):
     )
 
     id_usuario: Mapped[int | None] = mapped_column(
-        ForeignKey("usuario.id_usuario"),
-        nullable=True
+        ForeignKey("usuario.id_usuario"), nullable=True
     )
 
-    nombre_categoria: Mapped[str] = mapped_column(
-        String(60), nullable=False
-    )
+    nombre_categoria: Mapped[str] = mapped_column(String(60), nullable=False)
 
-    tipo_categoria: Mapped[str] = mapped_column(
-        String(10), nullable=False
-    )
+    tipo_categoria: Mapped[str] = mapped_column(String(10), nullable=False)
 
-    es_sistema: Mapped[bool] = mapped_column(
-        Boolean, nullable=False
-    )
+    es_sistema: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
-    estado: Mapped[str] = mapped_column(
-        String(10), nullable=False
-    )
+    estado: Mapped[str] = mapped_column(String(10), nullable=False)
