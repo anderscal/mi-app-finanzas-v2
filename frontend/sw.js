@@ -1,12 +1,14 @@
 
-// Service Worker: guarda los archivos
-// necesarios para abrir la PWA sin internet.
+// Service Worker de Finanzas Personales.
+//
+// Permite guardar los archivos estáticos
+// de la PWA para utilizarlos sin conexión.
 //
 // Las operaciones financieras pendientes
-// se almacenan en IndexedDB, no en Cache API.
+// permanecen en IndexedDB.
 
 
-const VERSION = 'fp-v15';
+const VERSION = 'fp-v17';
 
 const ARCHIVOS = [
   './',
@@ -40,8 +42,6 @@ const ARCHIVOS = [
   'js/vistas/asistente.js'
 ];
 
-
-// INSTALACION
 self.addEventListener('install', evento => {
   evento.waitUntil(
     caches.open(VERSION)
@@ -50,27 +50,24 @@ self.addEventListener('install', evento => {
   );
 });
 
-
-// ACTIVACION
 self.addEventListener('activate', evento => {
   evento.waitUntil(
     caches.keys()
       .then(claves => Promise.all(
         claves
-          .filter(clave => clave !== VERSION)
+          .filter(clave =>
+            clave.startsWith('fp-v') &&
+            clave !== VERSION
+          )
           .map(clave => caches.delete(clave))
       ))
       .then(() => self.clients.claim())
   );
 });
 
-
-// CACHE DE ARCHIVOS ESTATICOS
 self.addEventListener('fetch', evento => {
   const url = new URL(evento.request.url);
 
-  // No interceptar escrituras financieras
-  // ni peticiones al backend en otro origen.
   if (
     evento.request.method !== 'GET' ||
     url.origin !== self.location.origin
@@ -81,14 +78,13 @@ self.addEventListener('fetch', evento => {
   evento.respondWith(
     fetch(evento.request)
       .then(respuesta => {
-        const copia = respuesta.clone();
-
         if (respuesta.ok) {
+          const copia = respuesta.clone();
+
           caches.open(VERSION)
-            .then(cache => cache.put(
-              evento.request,
-              copia
-            ))
+            .then(cache =>
+              cache.put(evento.request, copia)
+            )
             .catch(() => {});
         }
 
@@ -99,9 +95,7 @@ self.addEventListener('fetch', evento => {
           evento.request
         );
 
-        if (guardada) {
-          return guardada;
-        }
+        if (guardada) return guardada;
 
         if (evento.request.mode === 'navigate') {
           return caches.match('index.html');
