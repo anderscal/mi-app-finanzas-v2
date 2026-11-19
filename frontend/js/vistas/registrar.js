@@ -1,5 +1,9 @@
-import { obtenerMisCuentas, obtenerCategorias, crearMovimientoNormal, ErrorDeRed } from '../api.js';
-import { guardarOffline } from '../offline.js';
+import { obtenerMisCuentas, obtenerCategorias, crearMovimientoNormal, ErrorApi, ErrorDeRed } from '../api.js';
+import {
+  guardarOffline,
+  sincronizar,
+  operacionesLocales
+} from '../offline.js';
 import {
   cop,
   esc,
@@ -13,7 +17,8 @@ import {
 
 export async function render(c) {
   const estado = { tipo: 'GASTO', categoria: null };
-
+  let uuidIntento = null;
+  let datosIntento = null;
   c.innerHTML = `
     <form id="form-mov" novalidate>
       <header class="banda banda-form" id="banda-mov">
@@ -239,6 +244,11 @@ export async function render(c) {
 
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
+    const boton = form.querySelector(
+      'button[type="submit"]'
+    );
+
+    if (boton.disabled) return;
     error.textContent = '';
     const valor = Number(monto.value.replace(/\D/g, ''));
     if (!valor) { error.textContent = 'Escribe un monto mayor a cero.'; monto.focus(); return; }
@@ -247,17 +257,46 @@ export async function render(c) {
     const fecha = form.fecha.value;
     if (!fecha || fecha > hoyISO()) { error.textContent = 'La fecha no puede ser futura.'; return; }
 
-    const movimiento = {
-      uuid_local: nuevoUUID(),
+
+    const datosActuales = {
       id_cuenta: Number(selectCuenta.value),
       id_categoria: estado.categoria,
       tipo: estado.tipo,
       monto: valor,
       fecha_movimiento: fecha,
-      descripcion: form.descripcion.value.trim() || null,
+      descripcion: form.descripcion.value.trim() || null
     };
 
-    const boton = form.querySelector('button[type="submit"]');
+    const contenidoActual = JSON.stringify(datosActuales);
+
+    // Si ya intentamos enviar una operación,
+    // no debemos cambiar su contenido conservando
+    // el mismo UUID.
+    if (
+      uuidIntento !== null &&
+      contenidoActual !== datosIntento
+    ) {
+      error.textContent =
+        'Existe un intento anterior sin confirmar. ' +
+        'Consulta tus movimientos pendientes antes ' +
+        'de modificarlo o registrar otro.';
+      return;
+    }
+
+    // Un único UUID mientras se intenta
+    // registrar la misma operación.
+    if (uuidIntento === null) {
+      uuidIntento = nuevoUUID();
+      datosIntento = contenidoActual;
+    }
+
+    const movimiento = {
+      uuid_local: uuidIntento,
+      ...datosActuales
+    };
+
+
+    /*const boton = form.querySelector('button[type="submit"]');*/
     boton.disabled = true;
     boton.textContent = 'Guardando…';
 
@@ -275,15 +314,105 @@ export async function render(c) {
     };
 
     if (!navigator.onLine) { await guardarSinConexion(); return; }
+
     try {
-      const r = await crearMovimientoNormal(movimiento);
-      aviso(r.mensaje || 'Movimiento registrado', 'ok');
-      location.hash = '#/inicio';
+      // PASO 1: Guardar primero en IndexedDB.
+      // No enviamos nada al servidor hasta confirmar
+      // que tenemos una copia local.
+      await guardarOffline(
+        'MOVIMIENTO_NORMAL',
+        movimiento.uuid_local,
+        movimiento
+      );
+
     } catch (e) {
-      if (e instanceof ErrorDeRed) { await guardarSinConexion(); return; }
-      error.textContent = e.message;
+      error.textContent =
+        'No se pudo guardar el movimiento en el ' +
+        'dispositivo: ' + e.message;
+
       boton.disabled = false;
       boton.textContent = 'Guardar movimiento';
+      return;
     }
+
+
+    // PASO 2: Intentar sincronización si hay conexión.
+    // Si falla, la operación sigue guardada.
+    if (navigator.onLine) {
+      try {
+        await sincronizar();
+      } catch (e) {
+        console.warn(
+          'La sincronización no pudo completarse:',
+          e
+        );
+      }
+    }
+
+
+    // PASO 3: Consultar el estado de nuestra operación.
+    let operacionLocal;
+    let consultaCorrecta = false;
+
+    try {
+      const locales = await operacionesLocales();
+
+      if (!Array.isArray(locales)) {
+        throw new Error(
+          'La cola local devolvió datos inválidos.'
+        );
+      }
+
+      operacionLocal = locales.find(
+        op => op.uuid_operacion === movimiento.uuid_local
+      );
+
+      consultaCorrecta = true;
+
+    } catch (e) {
+      console.warn(
+        'No se pudo consultar el estado local:',
+        e
+      );
+    }
+
+
+    // PASO 4: Informar el resultado sin inventar
+    // una confirmación del servidor.
+    if (!consultaCorrecta) {
+
+      aviso(
+        'Movimiento guardado. Revisa su estado ' +
+        'en Movimientos antes de repetirlo.',
+        'alerta'
+      );
+
+    } else if (operacionLocal?.estado_sync === 'ERROR') {
+
+      aviso(
+        'El servidor rechazó el movimiento. ' +
+        'Revísalo en Movimientos.',
+        'alerta'
+      );
+
+    } else if (operacionLocal) {
+
+      aviso(
+        'Movimiento guardado en el dispositivo. ' +
+        'Se enviará cuando pueda sincronizarse.',
+        'alerta'
+      );
+
+    } else {
+
+      aviso(
+        'Movimiento sincronizado correctamente.',
+        'ok'
+      );
+
+    }
+
+    location.hash = '#/inicio';
+
   });
 }

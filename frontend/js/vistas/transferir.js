@@ -1,5 +1,17 @@
-import { obtenerMisCuentas, crearTransferencia, ErrorDeRed } from '../api.js';
-import { guardarOffline } from '../offline.js';
+import {
+  obtenerMisCuentas,
+  ErrorDeRed
+} from '../api.js';
+
+import {
+  guardarOffline,
+  sincronizar
+} from '../offline.js';
+
+import {
+  obtenerOperacionesLocales
+} from '../offline-db.js';
+
 import { cop, esc, icono, hoyISO, nuevoUUID, aviso, leerCache } from '../util.js';
 
 const TASA_GMF = 0.004; // la misma que usa el backend (0,4 %)
@@ -140,33 +152,151 @@ export async function render(c) {
     const motivo = form.motivo.value.trim();
     if (motivo) datos.motivo = motivo;
 
-    const boton = form.querySelector('button[type="submit"]');
+
+    const boton = form.querySelector(
+      'button[type="submit"]'
+    );
+
+    // Evita dos envíos mientras se procesa
+    // el mismo formulario.
+    if (boton.disabled) return;
+
     boton.disabled = true;
-    boton.textContent = 'Transfiriendo…';
+    boton.textContent = 'Guardando transferencia…';
 
-    const guardarSinConexion = async () => {
-      try {
-        await guardarOffline('TRANSFERENCIA', uuidOperacion, datos);
-        aviso('Sin conexión: la transferencia quedó guardada en el celular y se enviará después.', 'alerta');
-        location.hash = '#/inicio';
-      } catch (e) {
-        error.textContent = e.message;
-        boton.disabled = false;
-        boton.textContent = 'Confirmar transferencia';
-      }
-    };
 
-    if (!navigator.onLine) { await guardarSinConexion(); return; }
+    // ------------------------------------
+    // PASO 1: GUARDAR PRIMERO EN INDEXEDDB
+    // ------------------------------------
+
     try {
-      const r = await crearTransferencia(datos);
-      const extra = Number(r.monto_gmf) > 0 ? ` · GMF ${cop(r.monto_gmf)}` : '';
-      aviso(`${r.mensaje}${extra}`, 'ok');
-      location.hash = '#/inicio';
+      await guardarOffline(
+        'TRANSFERENCIA',
+        uuidOperacion,
+        datos
+      );
+
     } catch (e) {
-      if (e instanceof ErrorDeRed) { await guardarSinConexion(); return; }
-      error.textContent = e.message;
+
+      error.textContent =
+        'No fue posible guardar la transferencia ' +
+        'en el dispositivo: ' + e.message;
+
       boton.disabled = false;
       boton.textContent = 'Confirmar transferencia';
+
+      return;
     }
+
+
+    // ------------------------------------
+    // PASO 2: INTENTAR SINCRONIZAR
+    // ------------------------------------
+
+    let resumenSync = null;
+
+    if (navigator.onLine) {
+
+      boton.textContent = 'Sincronizando…';
+
+      try {
+
+        resumenSync = await sincronizar();
+
+      } catch (e) {
+
+        // La operación ya quedó almacenada.
+        // No debemos crear otra ni cambiar el UUID.
+        console.warn(
+          'La sincronización no terminó:',
+          e
+        );
+      }
+    }
+
+
+    // ------------------------------------
+    // PASO 3: CONSULTAR EL ESTADO LOCAL
+    // ------------------------------------
+
+    let operacionLocal;
+    let lecturaCorrecta = false;
+
+    try {
+
+      // Consultamos IndexedDB directamente:
+      // esta función informa si falla la lectura.
+      const todas = await obtenerOperacionesLocales();
+
+      if (!Array.isArray(todas)) {
+        throw new Error(
+          'Respuesta local inválida'
+        );
+      }
+
+      operacionLocal = todas.find(
+        op => op.uuid_operacion === uuidOperacion
+      );
+
+      lecturaCorrecta = true;
+
+    } catch (e) {
+
+      console.warn(
+        'No fue posible leer la cola local:',
+        e
+      );
+    }
+
+
+    // ------------------------------------
+    // PASO 4: MOSTRAR EL RESULTADO
+    // ------------------------------------
+
+    if (!lecturaCorrecta) {
+
+      aviso(
+        'La transferencia quedó guardada. ' +
+        'No se pudo verificar su estado actual. ' +
+        'Revísala en Movimientos antes de repetirla.',
+        'alerta'
+      );
+
+    } else if (operacionLocal?.estado_sync === 'ERROR') {
+
+      aviso(
+        'El servidor rechazó la transferencia. ' +
+        'Revísala en Movimientos.',
+        'alerta'
+      );
+
+    } else if (operacionLocal) {
+
+      aviso(
+        'Transferencia guardada en el dispositivo. ' +
+        'Está pendiente de sincronización.',
+        'alerta'
+      );
+
+    } else if (resumenSync?.sincronizadas > 0) {
+
+      aviso(
+        'Sincronización completada. ' +
+        'Consulta el historial de transferencias.',
+        'ok'
+      );
+
+    } else {
+
+      aviso(
+        'La transferencia ya no figura pendiente. ' +
+        'Verifica su resultado en el historial.',
+        'alerta'
+      );
+
+    }
+
+    location.hash = '#/inicio';
+
   });
 }

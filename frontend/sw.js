@@ -1,43 +1,113 @@
-// Service Worker: guarda el "cascarón" de la app para que abra sin internet.
-// Las llamadas al backend no se guardan aquí; los movimientos sin conexión
-// van a IndexedDB (js/offline.js).
 
-const VERSION = 'fp-v10';
+// Service Worker: guarda los archivos
+// necesarios para abrir la PWA sin internet.
+//
+// Las operaciones financieras pendientes
+// se almacenan en IndexedDB, no en Cache API.
+
+
+const VERSION = 'fp-v15';
+
 const ARCHIVOS = [
   './',
   'index.html',
   'manifest.webmanifest',
   'icons/icono.svg',
   'css/estilos.css',
-  'js/app.js', 'js/api.js', 'js/config.js', 'js/sesion.js', 'js/offline.js', 'js/offline-db.js', 'js/sync.js', 'js/util.js',
-  'js/vistas/comun.js', 'js/vistas/login.js', 'js/vistas/registro.js', 'js/vistas/inicio.js', 'js/vistas/crear-cuenta.js',
-  'js/vistas/registrar.js', 'js/vistas/transferir.js', 'js/vistas/abonar.js', 'js/vistas/movimientos.js', 'js/vistas/deudas.js',
-  'js/vistas/metas.js', 'js/vistas/asistente.js', 'js/vistas/editar-cuenta.js','js/vistas/categorias.js',
+
+  'js/app.js',
+  'js/api.js',
+  'js/config.js',
+  'js/sesion.js',
+  'js/offline.js',
+  'js/offline-db.js',
+  'js/sync.js',
+  'js/util.js',
+
+  'js/vistas/comun.js',
+  'js/vistas/login.js',
+  'js/vistas/registro.js',
+  'js/vistas/inicio.js',
+  'js/vistas/crear-cuenta.js',
+  'js/vistas/editar-cuenta.js',
+  'js/vistas/categorias.js',
+  'js/vistas/registrar.js',
+  'js/vistas/transferir.js',
+  'js/vistas/abonar.js',
+  'js/vistas/movimientos.js',
+  'js/vistas/deudas.js',
+  'js/vistas/metas.js',
+  'js/vistas/asistente.js'
 ];
 
-self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(ARCHIVOS)).then(() => self.skipWaiting()));
+
+// INSTALACION
+self.addEventListener('install', evento => {
+  evento.waitUntil(
+    caches.open(VERSION)
+      .then(cache => cache.addAll(ARCHIVOS))
+      .then(() => self.skipWaiting())
+  );
 });
 
-self.addEventListener('activate', (e) => {
-  e.waitUntil(
+
+// ACTIVACION
+self.addEventListener('activate', evento => {
+  evento.waitUntil(
     caches.keys()
-      .then((claves) => Promise.all(claves.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
+      .then(claves => Promise.all(
+        claves
+          .filter(clave => clave !== VERSION)
+          .map(clave => caches.delete(clave))
+      ))
       .then(() => self.clients.claim())
   );
 });
 
-// Mismo origen: primero la red (para ver cambios al desarrollar), si falla, la caché.
-self.addEventListener('fetch', (e) => {
-  const url = new URL(e.request.url);
-  if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;
-  e.respondWith(
-    fetch(e.request)
-      .then((r) => {
-        const copia = r.clone();
-        caches.open(VERSION).then((c) => c.put(e.request, copia));
-        return r;
+
+// CACHE DE ARCHIVOS ESTATICOS
+self.addEventListener('fetch', evento => {
+  const url = new URL(evento.request.url);
+
+  // No interceptar escrituras financieras
+  // ni peticiones al backend en otro origen.
+  if (
+    evento.request.method !== 'GET' ||
+    url.origin !== self.location.origin
+  ) {
+    return;
+  }
+
+  evento.respondWith(
+    fetch(evento.request)
+      .then(respuesta => {
+        const copia = respuesta.clone();
+
+        if (respuesta.ok) {
+          caches.open(VERSION)
+            .then(cache => cache.put(
+              evento.request,
+              copia
+            ))
+            .catch(() => {});
+        }
+
+        return respuesta;
       })
-      .catch(() => caches.match(e.request).then((r) => r || caches.match('index.html')))
+      .catch(async () => {
+        const guardada = await caches.match(
+          evento.request
+        );
+
+        if (guardada) {
+          return guardada;
+        }
+
+        if (evento.request.mode === 'navigate') {
+          return caches.match('index.html');
+        }
+
+        return Response.error();
+      })
   );
 });
