@@ -2,8 +2,15 @@
 from decimal import Decimal
 
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+
+from app.models import (
+    CuentaFinanciera,
+    Movimiento,
+    Transferencia,
+)
 
 from app.persistence.anulacion_repository import (
     bloquear_movimiento_usuario,
@@ -12,12 +19,27 @@ from app.persistence.anulacion_repository import (
     bloquear_obligacion_anulacion,
 )
 
+from app.persistence.movimiento_escritura_repository import (
+    bloquear_cuenta,
+)
+
+from app.persistence.transferencia_repository import (
+    bloquear_cuentas_usuario,
+)
+
 from app.persistence.obligacion_escritura_repository import (
     obtener_abonos_obligacion,
 )
 
+from app.business.saldo_libre_service import (
+    exigir_saldo_libre,
+)
 
-def tipo_abono_obligacion(obligacion) -> str:
+
+CERO = Decimal("0.00")
+
+
+def tipo_abono_obligacion(obligacion):
     if obligacion.tipo_obligacion == "POR_PAGAR":
         return "GASTO"
 
@@ -34,7 +56,9 @@ def recalcular_estado_obligacion(
     db: Session,
     obligacion
 ):
-    tipo = tipo_abono_obligacion(obligacion)
+    tipo = tipo_abono_obligacion(
+        obligacion
+    )
 
     movimientos = obtener_abonos_obligacion(
         db,
@@ -42,25 +66,377 @@ def recalcular_estado_obligacion(
         tipo
     )
 
-    total_abonado = sum(
+    abonado = sum(
         (
-            movimiento.monto
-            for movimiento in movimientos
-            if movimiento.estado == "ACTIVO"
+            m.monto
+            for m in movimientos
+            if m.estado == "ACTIVO"
         ),
-        Decimal("0.00")
+        CERO
     )
 
-    pendiente = (
-        obligacion.monto_original
-        - total_abonado
-    )
+    pendiente = obligacion.monto_original - abonado
 
     obligacion.estado = (
         "SALDADA"
-        if pendiente <= Decimal("0.00")
+        if pendiente <= CERO
         else "ACTIVA"
     )
+
+
+def _consultar_movimiento_usuario(
+    db: Session,
+    id_usuario: int,
+    id_movimiento: int
+):
+    """
+    Consulta inicial de identificación.
+
+    Todavía NO modifica ni bloquea dinero.
+    Las filas necesarias se bloquearán
+    antes de verificar el saldo y anular.
+    """
+    return db.scalar(
+        select(Movimiento)
+        .join(
+            CuentaFinanciera,
+            Movimiento.id_cuenta
+            == CuentaFinanciera.id_cuenta
+        )
+        .where(
+            Movimiento.id_movimiento == id_movimiento,
+            CuentaFinanciera.id_usuario == id_usuario
+        )
+    )
+
+
+def _bloquear_cuenta_y_movimiento(
+    db: Session,
+    id_usuario: int,
+    id_movimiento: int,
+    id_cuenta: int
+):
+    """
+    Bloqueo consistente para una operación
+    que afecta a una sola cuenta.
+    """
+    cuenta = bloquear_cuenta(
+        db,
+        id_cuenta,
+        id_usuario
+    )
+
+    if cuenta is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Cuenta no encontrada"
+        )
+
+    movimiento = bloquear_movimiento_usuario(
+        db,
+        id_movimiento,
+        id_usuario
+    )
+
+    if movimiento is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Movimiento no encontrado"
+        )
+
+    db.refresh(movimiento)
+
+    if movimiento.id_cuenta != cuenta.id_cuenta:
+        raise HTTPException(
+            status_code=409,
+            detail="La cuenta del movimiento cambió"
+        )
+
+    if movimiento.estado != "ACTIVO":
+        raise HTTPException(
+            status_code=409,
+            detail="El movimiento ya está anulado"
+        )
+
+    return cuenta, movimiento
+
+
+def _anular_normal(
+    db: Session,
+    id_usuario: int,
+    vista: Movimiento
+):
+    cuenta, movimiento = (
+        _bloquear_cuenta_y_movimiento(
+            db,
+            id_usuario,
+            vista.id_movimiento,
+            vista.id_cuenta
+        )
+    )
+
+    if movimiento.origen != "NORMAL":
+        raise HTTPException(
+            status_code=409,
+            detail="Origen inconsistente"
+        )
+
+    # Anular un ingreso elimina dinero
+    # que anteriormente entró a la cuenta.
+    if movimiento.tipo == "INGRESO":
+        exigir_saldo_libre(
+            db,
+            cuenta,
+            movimiento.monto
+        )
+
+    movimiento.estado = "ANULADO"
+
+    db.commit()
+
+    return {
+        "id_movimiento": movimiento.id_movimiento,
+        "estado": "ANULADO",
+        "mensaje": (
+            "Movimiento normal anulado correctamente"
+        ),
+    }
+
+
+def _anular_transferencia(
+    db: Session,
+    id_usuario: int,
+    vista: Movimiento
+):
+    if vista.id_transferencia is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Transferencia inconsistente"
+        )
+
+    # Se consultan los IDs antes de bloquear
+    # para obtener luego ambas cuentas
+    # en orden ascendente.
+    transferencia_vista = db.get(
+        Transferencia,
+        vista.id_transferencia
+    )
+
+    if transferencia_vista is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Transferencia no encontrada"
+        )
+
+    cuentas = bloquear_cuentas_usuario(
+        db,
+        id_usuario,
+        transferencia_vista.id_cuenta_origen,
+        transferencia_vista.id_cuenta_destino
+    )
+
+    if len(cuentas) != 2:
+        raise HTTPException(
+            status_code=404,
+            detail="Transferencia no encontrada"
+        )
+
+    transferencia = bloquear_transferencia(
+        db,
+        vista.id_transferencia
+    )
+
+    if transferencia is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Transferencia no encontrada"
+        )
+
+    db.refresh(transferencia)
+
+    if transferencia.estado != "ACTIVA":
+        raise HTTPException(
+            status_code=409,
+            detail="La transferencia ya fue anulada"
+        )
+
+    movimientos = bloquear_movimientos_transferencia(
+        db,
+        transferencia.id_transferencia
+    )
+
+    if len(movimientos) != 2:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "La transferencia no tiene "
+                "los dos movimientos esperados"
+            )
+        )
+
+    for movimiento in movimientos:
+        db.refresh(movimiento)
+
+        if (
+            movimiento.estado != "ACTIVO"
+            or movimiento.origen != "TRANSFERENCIA"
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Movimientos de transferencia inconsistentes"
+            )
+
+    salidas = [
+        m for m in movimientos
+        if (
+            m.tipo == "GASTO"
+            and m.id_cuenta
+                == transferencia.id_cuenta_origen
+        )
+    ]
+
+    entradas = [
+        m for m in movimientos
+        if (
+            m.tipo == "INGRESO"
+            and m.id_cuenta
+                == transferencia.id_cuenta_destino
+        )
+    ]
+
+    if len(salidas) != 1 or len(entradas) != 1:
+        raise HTTPException(
+            status_code=409,
+            detail="Direcciones de transferencia inconsistentes"
+        )
+
+    if vista.id_movimiento not in {
+        m.id_movimiento for m in movimientos
+    }:
+        raise HTTPException(
+            status_code=409,
+            detail="El movimiento no pertenece a la transferencia"
+        )
+
+    # Anular la transferencia retira el
+    # dinero que había entrado al destino.
+    # No se puede retirar si ya fue reservado.
+    destino = cuentas[
+        transferencia.id_cuenta_destino
+    ]
+
+    exigir_saldo_libre(
+        db,
+        destino,
+        entradas[0].monto
+    )
+
+    for movimiento in movimientos:
+        movimiento.estado = "ANULADO"
+
+    transferencia.estado = "ANULADA"
+
+    db.commit()
+
+    return {
+        "id_movimiento": vista.id_movimiento,
+        "estado": "ANULADO",
+        "mensaje": (
+            "Transferencia anulada correctamente"
+        ),
+    }
+
+
+def _anular_abono_obligacion(
+    db: Session,
+    id_usuario: int,
+    vista: Movimiento
+):
+    if vista.id_obligacion is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Movimiento de obligación inconsistente"
+        )
+
+    # Mismo orden que el registro de abonos:
+    # obligación -> cuenta -> movimiento.
+    obligacion = bloquear_obligacion_anulacion(
+        db,
+        vista.id_obligacion
+    )
+
+    if (
+        obligacion is None
+        or obligacion.id_usuario != id_usuario
+    ):
+        raise HTTPException(
+            status_code=404,
+            detail="Obligación no encontrada"
+        )
+
+    cuenta, movimiento = (
+        _bloquear_cuenta_y_movimiento(
+            db,
+            id_usuario,
+            vista.id_movimiento,
+            vista.id_cuenta
+        )
+    )
+
+    if (
+        movimiento.origen != "OBLIGACION"
+        or movimiento.id_obligacion
+            != obligacion.id_obligacion
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Movimiento de obligación inconsistente"
+        )
+
+    tipo_abono = tipo_abono_obligacion(
+        obligacion
+    )
+
+    # El capital inicial y los abonos tienen
+    # sentidos opuestos. El capital inicial
+    # nunca se anula aisladamente.
+    if movimiento.tipo != tipo_abono:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "El movimiento inicial de una "
+                "obligación no puede anularse "
+                "por separado"
+            )
+        )
+
+    # Si anulamos un cobro POR_COBRAR,
+    # estamos retirando dinero ingresado.
+    if movimiento.tipo == "INGRESO":
+        exigir_saldo_libre(
+            db,
+            cuenta,
+            movimiento.monto
+        )
+
+    movimiento.estado = "ANULADO"
+
+    db.flush()
+
+    recalcular_estado_obligacion(
+        db,
+        obligacion
+    )
+
+    db.commit()
+
+    return {
+        "id_movimiento": movimiento.id_movimiento,
+        "estado": "ANULADO",
+        "mensaje": (
+            "Abono de obligación anulado correctamente"
+        ),
+    }
 
 
 def anular_movimiento(
@@ -75,152 +451,38 @@ def anular_movimiento(
         )
 
     try:
-        movimiento = bloquear_movimiento_usuario(
+        vista = _consultar_movimiento_usuario(
             db,
-            id_movimiento,
-            id_usuario
+            id_usuario,
+            id_movimiento
         )
 
-        if movimiento is None:
+        if vista is None:
             raise HTTPException(
                 status_code=404,
                 detail="Movimiento no encontrado"
             )
 
-        if movimiento.estado == "ANULADO":
-            raise HTTPException(
-                status_code=409,
-                detail="El movimiento ya está anulado"
-            )
-
-        # --------------------------------
-        # MOVIMIENTO NORMAL
-        # --------------------------------
-
-        if movimiento.origen == "NORMAL":
-            movimiento.estado = "ANULADO"
-
-            db.commit()
-
-            return {
-                "id_movimiento": movimiento.id_movimiento,
-                "estado": "ANULADO",
-                "mensaje": (
-                    "Movimiento normal anulado correctamente"
-                )
-            }
-
-        # --------------------------------
-        # TRANSFERENCIA INTERNA
-        # --------------------------------
-
-        if movimiento.origen == "TRANSFERENCIA":
-            if movimiento.id_transferencia is None:
-                raise HTTPException(
-                    status_code=409,
-                    detail="Transferencia inconsistente"
-                )
-
-            transferencia = bloquear_transferencia(
+        if vista.origen == "NORMAL":
+            return _anular_normal(
                 db,
-                movimiento.id_transferencia
+                id_usuario,
+                vista
             )
 
-            if transferencia is None:
-                raise HTTPException(
-                    status_code=409,
-                    detail="Transferencia no encontrada"
-                )
-
-            movimientos = bloquear_movimientos_transferencia(
+        if vista.origen == "TRANSFERENCIA":
+            return _anular_transferencia(
                 db,
-                movimiento.id_transferencia
+                id_usuario,
+                vista
             )
 
-            if len(movimientos) != 2:
-                raise HTTPException(
-                    status_code=409,
-                    detail=(
-                        "La transferencia no tiene "
-                        "los dos movimientos esperados"
-                    )
-                )
-
-            for mov in movimientos:
-                mov.estado = "ANULADO"
-
-            transferencia.estado = "ANULADA"
-
-            db.commit()
-
-            return {
-                "id_movimiento": movimiento.id_movimiento,
-                "estado": "ANULADO",
-                "mensaje": (
-                    "Transferencia anulada correctamente"
-                )
-            }
-
-        # --------------------------------
-        # MOVIMIENTO DE OBLIGACIÓN
-        # --------------------------------
-
-        if movimiento.origen == "OBLIGACION":
-            if movimiento.id_obligacion is None:
-                raise HTTPException(
-                    status_code=409,
-                    detail=(
-                        "Movimiento de obligación inconsistente"
-                    )
-                )
-
-            obligacion = bloquear_obligacion_anulacion(
+        if vista.origen == "OBLIGACION":
+            return _anular_abono_obligacion(
                 db,
-                movimiento.id_obligacion
+                id_usuario,
+                vista
             )
-
-            if obligacion is None:
-                raise HTTPException(
-                    status_code=409,
-                    detail="Obligación no encontrada"
-                )
-
-            tipo_abono = tipo_abono_obligacion(
-                obligacion
-            )
-
-            # Los abonos y el capital inicial
-            # utilizan direcciones opuestas.
-            # Solo los abonos pueden anularse
-            # individualmente desde el historial.
-            if movimiento.tipo != tipo_abono:
-                raise HTTPException(
-                    status_code=409,
-                    detail=(
-                        "El movimiento inicial de una "
-                        "obligación no puede anularse "
-                        "por separado"
-                    )
-                )
-
-            movimiento.estado = "ANULADO"
-
-            db.flush()
-
-            recalcular_estado_obligacion(
-                db,
-                obligacion
-            )
-
-            db.commit()
-
-            return {
-                "id_movimiento": movimiento.id_movimiento,
-                "estado": "ANULADO",
-                "mensaje": (
-                    "Abono de obligación anulado correctamente"
-                )
-            }
 
         raise HTTPException(
             status_code=409,

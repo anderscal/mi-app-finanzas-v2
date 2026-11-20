@@ -9,8 +9,11 @@ import {
   obtenerMeta,
   crearMeta,
   actualizarMeta,
-  aportarMeta,
   desactivarMeta,
+  obtenerSaldosReservados,
+  obtenerDetalleReservasMeta,
+  reservarDineroMeta,
+  liberarDineroMeta,
   ErrorDeRed
 } from '../api.js';
 
@@ -21,6 +24,7 @@ import {
   esc,
   nombreMes,
   hoyISO,
+  nuevoUUID,
   aviso,
   guardarCache,
   leerCache
@@ -34,57 +38,118 @@ import {
 
 
 export async function render(c) {
-
   const hoy = new Date();
 
   let mes = hoy.getMonth() + 1;
   let anio = hoy.getFullYear();
 
+  const usuarioInicial = Number(
+    obtenerUsuario()?.id_usuario
+  );
+
+  const mismaSesion = () =>
+    Number.isSafeInteger(usuarioInicial) &&
+    usuarioInicial > 0 &&
+    Number(obtenerUsuario()?.id_usuario) === usuarioInicial;
+
   let presupuestos = [];
-  let metas = [];
 
   let planificacion = {
     presupuestos: [],
-    metas: [],
-    obligaciones: []
+    metas: []
   };
 
+  let metas = [];
+  let saldos = [];
+  let detalles = new Map();
+
   let ocupada = false;
-  let desdeCache = false;
+  let metaEditada = null;
+  let intentoIncierto = null;
+  let hayDatosGuardados = false;
+
+
+  const num = valor =>
+    Number.isFinite(Number(valor))
+      ? Number(valor)
+      : 0;
+
+  const montoValido = valor =>
+    /^(?:0|[1-9]\d{0,12})(?:\.\d{1,2})?$/.test(valor) &&
+    Number(valor) > 0;
+
+  const montoTexto = valor =>
+    String(valor ?? '').trim().replace(',', '.');
+
+  const periodo = () =>
+    `${nombreMes(mes)} ${anio}`;
+
+  const porcentaje = (parte, total) =>
+    total > 0 ? 100 * parte / total : 0;
+
+  const ancho = valor =>
+    Math.min(100, Math.max(0, num(valor)));
+
+  const errorTexto = e =>
+    e instanceof ErrorDeRed
+      ? (
+          'No se recibió confirmación. ' +
+          'Revisa los datos antes de crear ' +
+          'una operación diferente.'
+        )
+      : (
+          e?.message ||
+          'No se pudo completar la operación.'
+        );
+
+  const metaId = id =>
+    metas.find(
+      m => Number(m.id_meta) === Number(id)
+    );
+
+  const presId = id =>
+    presupuestos.find(
+      p =>
+        Number(p.id_presupuesto) === Number(id)
+    );
+
+
+  // ----------------------------------
+  // ESTRUCTURA PRINCIPAL
+  // ----------------------------------
 
   c.innerHTML = `
     <style>
-      .pm-cabecera {
+      .pm-titulo {
         display: flex;
         align-items: center;
         justify-content: space-between;
+        gap: 10px;
         flex-wrap: wrap;
-        gap: 12px;
       }
 
       .pm-nuevo {
         border: 0;
         border-radius: 999px;
         background: #087a59;
-        color: #fff;
+        color: white;
         padding: 11px 15px;
         font: inherit;
         font-size: 13px;
         font-weight: 800;
-        cursor: pointer;
       }
 
       .pm-nuevo:disabled,
       .pm-modal button:disabled {
-        opacity: .45;
+        opacity: .5;
         cursor: not-allowed;
       }
 
       .pm-periodo {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 110px;
+        grid-template-columns: minmax(0, 1fr) 108px;
         gap: 10px;
-        margin: 16px 0;
+        margin: 14px 0;
       }
 
       .pm-periodo label {
@@ -95,14 +160,13 @@ export async function render(c) {
         font-weight: 700;
       }
 
-      .pm-periodo select,
-      .pm-periodo input {
-        min-width: 0;
+      .pm-periodo input,
+      .pm-periodo select {
         width: 100%;
-        box-sizing: border-box;
+        min-width: 0;
       }
 
-      .pm-tarjetas {
+      .pm-lista {
         display: flex;
         flex-direction: column;
         gap: 12px;
@@ -111,10 +175,10 @@ export async function render(c) {
       .pm-tarjeta {
         display: flex;
         flex-direction: column;
-        gap: 12px;
-        padding: 16px;
+        gap: 10px;
         background: #f3f6f4;
-        border-radius: 16px;
+        border-radius: 17px;
+        padding: 16px;
       }
 
       .pm-fila {
@@ -131,26 +195,38 @@ export async function render(c) {
 
       .pm-etiqueta {
         border-radius: 999px;
+        background: #e0f2e9;
+        color: #08684c;
         padding: 5px 9px;
-        background: #dff1e8;
-        color: #087a59;
         font-size: 11px;
         font-weight: 800;
       }
 
       .pm-etiqueta.alerta {
         background: #fff0cd;
-        color: #8a5700;
+        color: #845400;
       }
 
-      .pm-etiqueta.excedido {
-        background: #ffe1d8;
-        color: #a33721;
+      .pm-etiqueta.exceso {
+        background: #ffe2da;
+        color: #a13724;
+      }
+
+      .pm-nota {
+        font-size: 12px;
+        color: #586960;
+        line-height: 1.5;
+      }
+
+      .pm-alerta {
+        font-size: 12px;
+        color: #915419;
+        line-height: 1.5;
       }
 
       .pm-barra {
-        height: 10px;
-        background: #dce7e0;
+        height: 9px;
+        background: #dbe6df;
         border-radius: 999px;
         overflow: hidden;
       }
@@ -165,40 +241,32 @@ export async function render(c) {
         background: #d59a2a;
       }
 
-      .pm-barra span.excedido {
+      .pm-barra span.exceso {
         background: #bf5538;
-      }
-
-      .pm-nota {
-        font-size: 12px;
-        color: #596960;
-        line-height: 1.5;
       }
 
       .pm-acciones {
         display: flex;
-        gap: 9px;
+        gap: 8px;
         flex-wrap: wrap;
-      }
-
-      .pm-acciones button {
-        cursor: pointer;
       }
 
       .pm-resumen {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns:
+          repeat(2, minmax(0, 1fr));
         gap: 10px;
-        margin-bottom: 14px;
+        margin: 12px 0;
       }
 
-      .pm-resumen div {
+      .pm-resumen > div {
+        background: #eef3ef;
+        border-radius: 14px;
+        padding: 13px;
         display: flex;
         flex-direction: column;
         gap: 5px;
-        padding: 14px;
-        background: #f1f5f2;
-        border-radius: 14px;
+        min-width: 0;
       }
 
       .pm-resumen span {
@@ -211,8 +279,28 @@ export async function render(c) {
         overflow-wrap: anywhere;
       }
 
+      .pm-compacto {
+        background: #e6f4ec;
+        border-radius: 16px;
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+
+      .pm-compacto .cantidad {
+        font-weight: 800;
+        font-size: 22px;
+        color: #075640;
+      }
+
+      .pm-compacto .enlace {
+        align-self: flex-start;
+        padding: 4px 0;
+      }
+
       .pm-error {
-        color: #b42318;
+        color: #ad3021;
         font-size: 13px;
         line-height: 1.5;
       }
@@ -230,10 +318,10 @@ export async function render(c) {
         border-radius: 20px;
         padding: 0;
         margin: auto;
-        background: #fff;
+        background: white;
         color: #17251f;
         overflow: hidden;
-        box-shadow: 0 18px 60px rgba(0,0,0,.2);
+        box-shadow: 0 18px 60px #0003;
       }
 
       .pm-modal[open] {
@@ -242,7 +330,7 @@ export async function render(c) {
       }
 
       .pm-modal::backdrop {
-        background: rgba(0,0,0,.55);
+        background: #0009;
       }
 
       .pm-form {
@@ -261,17 +349,12 @@ export async function render(c) {
         gap: 10px;
         padding: 16px 20px;
         flex-shrink: 0;
-        border-bottom: 1px solid #e5ece8;
-      }
-
-      .pm-modal-cabeza h2 {
-        margin: 0;
-        font-size: 20px;
+        border-bottom: 1px solid #e4ebe7;
       }
 
       .pm-modal-pie {
-        border-top: 1px solid #e5ece8;
-        border-bottom: 0;
+        border: 0;
+        border-top: 1px solid #e4ebe7;
       }
 
       .pm-modal-pie button {
@@ -279,21 +362,25 @@ export async function render(c) {
         min-width: 0;
       }
 
+      .pm-modal-cabeza h2 {
+        margin: 0;
+        font-size: 20px;
+      }
+
       .pm-cerrar {
-        border: 0;
-        border-radius: 50%;
         width: 36px;
         height: 36px;
+        border: 0;
+        border-radius: 50%;
         background: #edf1ef;
         font-size: 23px;
-        cursor: pointer;
       }
 
       .pm-modal-cuerpo {
-        padding: 20px;
-        overflow-y: auto;
         min-height: 0;
+        overflow-y: auto;
         overscroll-behavior: contain;
+        padding: 20px;
       }
 
       .pm-modal-cuerpo .campo {
@@ -303,8 +390,6 @@ export async function render(c) {
       .pm-modal-cuerpo input,
       .pm-modal-cuerpo select,
       .pm-modal-cuerpo textarea {
-        box-sizing: border-box;
-        display: block;
         width: 100%;
         max-width: 100%;
       }
@@ -314,13 +399,17 @@ export async function render(c) {
       }
 
       .pm-modal-nota {
-        background: #e3f3ea;
+        background: #e4f3eb;
         color: #07533e;
         border-radius: 13px;
         padding: 12px;
         font-size: 13px;
         line-height: 1.5;
         margin-bottom: 14px;
+      }
+
+      .pm-condicional[hidden] {
+        display: none;
       }
 
       @media (max-width: 430px) {
@@ -337,12 +426,12 @@ export async function render(c) {
     </style>
 
     ${banda('Presupuestos y metas', {
-      subtitulo: 'Planifica tus gastos y objetivos de ahorro'
+      subtitulo:
+        'Controla tus gastos y tus objetivos de ahorro'
     })}
 
     <section class="seccion">
-
-      <div class="pm-cabecera">
+      <div class="pm-titulo">
         <h2>Presupuesto mensual</h2>
 
         <button
@@ -355,49 +444,46 @@ export async function render(c) {
       </div>
 
       <div class="pm-periodo">
-
-        <label for="pm-mes">
+        <label>
           Mes
+
           <select id="pm-mes">
-            ${Array.from(
-              { length: 12 },
-              (_, i) => `
-                <option value="${i + 1}">
-                  ${nombreMes(i + 1)}
-                </option>
-              `
-            ).join('')}
+            ${
+              Array.from(
+                { length: 12 },
+                (_, i) => `
+                  <option value="${i + 1}">
+                    ${nombreMes(i + 1)}
+                  </option>
+                `
+              ).join('')
+            }
           </select>
         </label>
 
-        <label for="pm-anio">
+        <label>
           Año
+
           <input
-            type="number"
             id="pm-anio"
+            type="number"
             min="2000"
             max="9998"
             value="${anio}"
           >
         </label>
-
       </div>
-
-      <p id="pm-estado" class="nota" hidden></p>
 
       <div
         id="pm-presupuestos"
-        class="pm-tarjetas"
+        class="pm-lista"
       >
         ${cargando()}
       </div>
-
     </section>
 
-
     <section class="seccion">
-
-      <div class="pm-cabecera">
+      <div class="pm-titulo">
         <h2>Metas de ahorro</h2>
 
         <button
@@ -409,22 +495,28 @@ export async function render(c) {
         </button>
       </div>
 
-      <p class="pm-nota">
-        Los aportes de metas registran progreso
-        de ahorro. No mueven dinero entre cuentas
-        ni modifican el saldo bancario.
-      </p>
+      <div
+        id="pm-resumen-reservas"
+        class="pm-compacto"
+      >
+        Consultando ahorro reservado…
+      </div>
 
       <div
         id="pm-metas"
-        class="pm-tarjetas"
+        class="pm-lista"
       >
         ${cargando()}
       </div>
-
     </section>
 
     <section class="seccion">
+      <p
+        id="pm-estado"
+        class="nota"
+        hidden
+      ></p>
+
       <p
         id="pm-error"
         class="pm-error"
@@ -440,111 +532,45 @@ export async function render(c) {
     ></dialog>
   `;
 
-  const selectorMes = c.querySelector('#pm-mes');
-  const selectorAnio = c.querySelector('#pm-anio');
-  const listaPres = c.querySelector('#pm-presupuestos');
-  const listaMetas = c.querySelector('#pm-metas');
-  const modal = c.querySelector('#pm-modal');
-  const mensaje = c.querySelector('#pm-error');
-  const estado = c.querySelector('#pm-estado');
 
-  const nuevoPres = c.querySelector('#pm-nuevo-pres');
-  const nuevaMeta = c.querySelector('#pm-nueva-meta');
+  // ----------------------------------
+  // REFERENCIAS
+  // ----------------------------------
 
+  const $ = selector => c.querySelector(selector);
 
-  // ------------------------------------
-  // FUNCIONES AUXILIARES
-  // ------------------------------------
+  const listaPres = $('#pm-presupuestos');
+  const listaMetas = $('#pm-metas');
+  const resumenReservas = $('#pm-resumen-reservas');
 
-  function numero(valor) {
-    const n = Number(valor);
-    return Number.isFinite(n) ? n : 0;
-  }
+  const selectorMes = $('#pm-mes');
+  const selectorAnio = $('#pm-anio');
 
-  function montoValido(valor) {
-    return (
-      /^(?:0|[1-9]\d{0,12})(?:\.\d{1,2})?$/.test(valor) &&
-      Number(valor) > 0
-    );
-  }
+  const botonPres = $('#pm-nuevo-pres');
+  const botonMeta = $('#pm-nueva-meta');
 
-  function montoFormulario(form) {
-    return form.elements.monto.value
-      .trim()
-      .replace(',', '.');
-  }
-
-  function periodoTexto() {
-    return `${nombreMes(mes)} ${anio}`;
-  }
-
-  function mostrarError(error, destino = mensaje) {
-    destino.textContent =
-      error instanceof ErrorDeRed
-        ? (
-            'No se recibió confirmación. ' +
-            'Actualiza los datos antes de intentar ' +
-            'de nuevo para evitar duplicados.'
-          )
-        : (
-            error?.message ||
-            'No se pudo completar la operación.'
-          );
-  }
-
-  function metaPorId(id) {
-    return metas.find(
-      m => Number(m.id_meta) === id
-    );
-  }
-
-  function presupuestoPorId(id) {
-    return presupuestos.find(
-      p => Number(p.id_presupuesto) === id
-    );
-  }
-
-  function porcentajeMeta(id) {
-    const calculo = planificacion.metas.find(
-      m => Number(m.id_meta) === id
-    );
-
-    return calculo
-      ? numero(calculo.porcentaje_progreso)
-      : null;
-  }
-
-  function fechaPorDefecto() {
-    const d = new Date();
-    d.setMonth(d.getMonth() + 3);
-
-    const dos = n => String(n).padStart(2, '0');
-
-    return (
-      `${d.getFullYear()}-` +
-      `${dos(d.getMonth() + 1)}-` +
-      `${dos(d.getDate())}`
-    );
-  }
-
-  function cerrarModal() {
-    if (modal.open) {
-      modal.close();
-    }
-  }
+  const modal = $('#pm-modal');
+  const mensaje = $('#pm-error');
+  const estado = $('#pm-estado');
 
 
-  // ------------------------------------
-  // CARGA DE DATOS + CACHÉ
-  // ------------------------------------
+  // ----------------------------------
+  // CONSULTAS Y CACHÉ
+  // ----------------------------------
 
-  async function conCache(clave, consulta, validar) {
+  async function conCache(clave, consultar, validar) {
     try {
-      const datos = await consulta();
+      const datos = await consultar();
+
+      if (!mismaSesion()) {
+        throw new Error(
+          'La sesión cambió. Vuelve a abrir la pantalla.'
+        );
+      }
 
       if (!validar(datos)) {
         throw new Error(
-          `Respuesta inválida de ${clave}`
+          'Respuesta inválida: ' + clave
         );
       }
 
@@ -555,14 +581,14 @@ export async function render(c) {
         cache: false
       };
 
-    } catch (error) {
-      if (error instanceof ErrorDeRed) {
+    } catch (e) {
+      if (
+        e instanceof ErrorDeRed &&
+        mismaSesion()
+      ) {
         const guardado = leerCache(clave);
 
-        if (
-          guardado &&
-          validar(guardado.datos)
-        ) {
+        if (validar(guardado?.datos)) {
           return {
             datos: guardado.datos,
             cache: true
@@ -570,21 +596,13 @@ export async function render(c) {
         }
       }
 
-      throw error;
+      throw e;
     }
   }
 
 
   async function cargarTodo() {
-    const idUsuario = Number(
-      obtenerUsuario()?.id_usuario
-    );
-
-    const [
-      resultadoPres,
-      resultadoPlan,
-      resultadoMetas
-    ] = await Promise.all([
+    const [p, plan, m, s] = await Promise.all([
       conCache(
         'presupuestos',
         obtenerPresupuestos,
@@ -594,74 +612,104 @@ export async function render(c) {
       conCache(
         'planificacion',
         obtenerPlanificacion,
-        x => (
+        x =>
           Array.isArray(x?.presupuestos) &&
           Array.isArray(x?.metas)
-        )
       ),
 
       conCache(
         'metas',
         obtenerMetas,
         Array.isArray
+      ),
+
+      conCache(
+        'metas-saldos-reservados',
+        obtenerSaldosReservados,
+        Array.isArray
       )
     ]);
 
-    if (
-      !Number.isSafeInteger(idUsuario) ||
-      idUsuario <= 0 ||
-      Number(obtenerUsuario()?.id_usuario) !== idUsuario
-    ) {
-      throw new Error(
-        'La sesión cambió. Recarga la pantalla.'
-      );
-    }
+    if (!mismaSesion()) return;
 
-    presupuestos = resultadoPres.datos;
-    planificacion = resultadoPlan.datos;
-    metas = resultadoMetas.datos;
+    presupuestos = p.datos;
+    planificacion = plan.datos;
+    metas = m.datos;
+    saldos = s.datos;
 
-    desdeCache = (
-      resultadoPres.cache ||
-      resultadoPlan.cache ||
-      resultadoMetas.cache
+    hayDatosGuardados =
+      p.cache ||
+      plan.cache ||
+      m.cache ||
+      s.cache;
+
+    const resultados = await Promise.allSettled(
+      metas.map(meta =>
+        conCache(
+          `meta-reservas-${meta.id_meta}`,
+          () => obtenerDetalleReservasMeta(
+            meta.id_meta
+          ),
+          x =>
+            x &&
+            Number(x.id_meta) === Number(meta.id_meta) &&
+            Array.isArray(x.registros)
+        )
+      )
     );
 
-    estado.hidden = !desdeCache;
+    if (!mismaSesion()) return;
 
-    if (desdeCache) {
-      estado.textContent =
-        'Mostrando datos guardados del usuario. ' +
-        'Crear y editar requiere conexión.';
-    }
+    detalles = new Map();
+
+    resultados.forEach((resultado, i) => {
+      if (resultado.status === 'fulfilled') {
+        detalles.set(
+          Number(metas[i].id_meta),
+          resultado.value.datos
+        );
+
+        hayDatosGuardados ||= resultado.value.cache;
+      }
+    });
+
+    estado.hidden = !hayDatosGuardados;
+
+    estado.textContent = hayDatosGuardados
+      ? (
+          'Sin conexión: se muestran los últimos ' +
+          'datos guardados. Las reservas requieren conexión.'
+        )
+      : '';
 
     pintarPresupuestos();
+    pintarResumenReservas();
     pintarMetas();
   }
 
 
-  // ------------------------------------
-  // TARJETAS DE PRESUPUESTOS
-  // ------------------------------------
+  // ----------------------------------
+  // PRESUPUESTOS
+  // ----------------------------------
 
   function pintarPresupuestos() {
     selectorMes.value = String(mes);
     selectorAnio.value = String(anio);
 
-    const delPeriodo = presupuestos.filter(
-      p => (
+    const vigentes = presupuestos.filter(
+      p =>
         Number(p.mes) === mes &&
         Number(p.anio) === anio
-      )
     );
 
-    if (!delPeriodo.length) {
+    if (!vigentes.length) {
       listaPres.innerHTML = `
         <p class="vacio">
           No tienes presupuestos para
-          ${esc(periodoTexto())}.
+          ${esc(periodo())}.
         </p>
       `;
+
       return;
     }
 
@@ -671,91 +719,76 @@ export async function render(c) {
       )
     );
 
-    let totalLimites = 0;
-    let totalGastado = 0;
-    let completo = true;
+    let limite = 0;
+    let gastado = 0;
+    let completos = true;
 
-    const tarjetas = delPeriodo.map(p => {
-      const id = Number(p.id_presupuesto);
-      const calculo = calculos.get(id);
-      const limite = numero(p.monto_limite);
+    const tarjetas = vigentes.map(p => {
+      const calc = calculos.get(
+        Number(p.id_presupuesto)
+      );
 
-      totalLimites += limite;
+      const total = num(p.monto_limite);
+      limite += total;
 
-      if (!calculo) {
-        completo = false;
+      if (calc) {
+        gastado += num(calc.gastado);
       } else {
-        totalGastado += numero(calculo.gastado);
+        completos = false;
       }
 
-      const gastado = calculo
-        ? numero(calculo.gastado)
+      const pct = calc
+        ? num(calc.porcentaje_usado)
         : null;
 
-      const disponible = calculo
-        ? numero(calculo.disponible)
-        : null;
-
-      const porcentaje = calculo
-        ? numero(calculo.porcentaje_usado)
-        : null;
-
-      const clase = porcentaje === null
+      const clase = pct === null
         ? ''
-        : porcentaje >= 100
-          ? 'excedido'
-          : porcentaje >= 90
+        : pct >= 100
+          ? 'exceso'
+          : pct >= 90
             ? 'alerta'
             : '';
 
-      const progreso = porcentaje === null
-        ? 0
-        : Math.min(
-            100,
-            Math.max(0, porcentaje)
-          );
-
-      const etiqueta = porcentaje === null
-        ? 'Sin cálculo'
-        : porcentaje >= 100
-          ? 'Límite alcanzado'
-          : porcentaje >= 90
-            ? 'Cerca del límite'
-            : 'En presupuesto';
-
-      const textoDisponible = disponible === null
-        ? 'Gasto pendiente de consultar'
-        : disponible >= 0
-          ? `Disponible ${cop(disponible)}`
-          : `Excedido en ${cop(-disponible)}`;
+      const disponible = calc
+        ? num(calc.disponible)
+        : null;
 
       return `
         <article class="pm-tarjeta">
-
           <div class="pm-fila">
             <strong>
-              ${esc(
-                calculo?.categoria ||
-                `Categoría #${p.id_categoria}`
-              )}
+              ${
+                esc(
+                  calc?.categoria ||
+                  'Categoría #' + p.id_categoria
+                )
+              }
             </strong>
 
             <span class="pm-etiqueta ${clase}">
-              ${etiqueta}
+              ${
+                pct === null
+                  ? 'Sin cálculo'
+                  : pct >= 100
+                    ? 'Límite alcanzado'
+                    : pct >= 90
+                      ? 'Cerca del límite'
+                      : 'En presupuesto'
+              }
             </span>
           </div>
 
           <div class="pm-fila">
             <strong class="monto">
               ${
-                gastado === null
-                  ? '—'
-                  : cop(gastado)
+                calc
+                  ? cop(calc.gastado)
+                  : '—'
               }
             </strong>
 
             <span class="pm-nota">
-              de ${cop(limite)}
+              de ${cop(total)}
             </span>
           </div>
 
@@ -763,24 +796,31 @@ export async function render(c) {
             class="pm-barra"
             role="img"
             aria-label="${
-              porcentaje === null
-                ? 'Sin porcentaje disponible'
-                : porcentaje.toFixed(1) + '% utilizado'
+              pct === null
+                ? 'Porcentaje no disponible'
+                : pct.toFixed(1) + '% utilizado'
             }"
           >
             <span
               class="${clase}"
-              style="width:${progreso}%"
+              style="width:${ancho(pct)}%"
             ></span>
           </div>
 
           <div class="pm-fila">
             <span class="pm-nota">
-              ${esc(textoDisponible)}
               ${
-                porcentaje === null
+                disponible === null
+                  ? 'Sin cálculo'
+                  : disponible >= 0
+                    ? 'Disponible ' + cop(disponible)
+                    : 'Excedido en ' + cop(-disponible)
+              }
+
+              ${
+                pct === null
                   ? ''
-                  : `· ${porcentaje.toFixed(1)}% utilizado`
+                  : ' · ' + pct.toFixed(1) + '%'
               }
             </span>
 
@@ -788,12 +828,13 @@ export async function render(c) {
               type="button"
               class="btn btn-chico"
               data-pres="editar"
-              data-id="${id}"
+              data-id="${
+                Number(p.id_presupuesto)
+              }"
             >
               Editar
             </button>
           </div>
-
         </article>
       `;
     }).join('');
@@ -802,82 +843,123 @@ export async function render(c) {
       <div class="pm-resumen">
         <div>
           <span>Límite planificado</span>
+
           <strong class="monto">
-            ${cop(totalLimites)}
+            ${cop(limite)}
           </strong>
         </div>
 
         <div>
           <span>Gastado del período</span>
+
           <strong class="monto">
             ${
-              completo
-                ? cop(totalGastado)
+              completos
+                ? cop(gastado)
                 : 'Pendiente'
             }
           </strong>
         </div>
       </div>
 
-      <div class="pm-tarjetas">
-        ${tarjetas}
-      </div>
+      ${tarjetas}
     `;
   }
 
 
-  // ------------------------------------
-  // TARJETAS DE METAS
-  // ------------------------------------
+  // ----------------------------------
+  // RESUMEN COMPACTO DE RESERVAS
+  // ----------------------------------
+
+  function pintarResumenReservas() {
+    const reservado = saldos.reduce(
+      (total, s) =>
+        total + num(s.monto_reservado),
+      0
+    );
+
+    const cuentasConReserva = saldos.filter(
+      s => num(s.monto_reservado) > 0
+    ).length;
+
+    resumenReservas.innerHTML = `
+      <span class="pm-nota">
+        Dinero reservado para tus metas
+      </span>
+
+      <span class="cantidad monto">
+        ${cop(reservado)}
+      </span>
+
+      <span class="pm-nota">
+        ${cuentasConReserva} cuenta(s) con reservas
+
+        ${
+          hayDatosGuardados
+            ? ' · datos guardados'
+            : ''
+        }
+      </span>
+
+      <a
+        class="enlace"
+        href="#/inicio"
+      >
+        Ver saldo libre y detalle por cuenta en Inicio
+      </a>
+    `;
+  }
+
+
+  // ----------------------------------
+  // METAS DE AHORRO
+  // ----------------------------------
 
   function pintarMetas() {
     if (!metas.length) {
       listaMetas.innerHTML = `
         <p class="vacio">
           Aún no tienes metas.
-          Utiliza «Nueva meta» para comenzar.
+          Usa «Nueva meta» para comenzar.
         </p>
       `;
+
       return;
     }
 
     listaMetas.innerHTML = metas.map(meta => {
       const id = Number(meta.id_meta);
-      const acumulado = numero(meta.monto_acumulado);
-      const objetivo = numero(meta.monto_objetivo);
-      const faltante = Math.max(
-        0,
-        objetivo - acumulado
-      );
+      const acumulado = num(meta.monto_acumulado);
+      const objetivo = num(meta.monto_objetivo);
+      const pct = porcentaje(acumulado, objetivo);
 
-      const porcentaje = porcentajeMeta(id);
+      const detalle = detalles.get(id);
 
-      const progreso = porcentaje === null
-        ? 0
-        : Math.min(
-            100,
-            Math.max(0, porcentaje)
-          );
+      const vinculado = detalle
+        ? num(detalle.monto_vinculado)
+        : null;
+
+      const anterior = detalle
+        ? num(detalle.monto_sin_vincular)
+        : null;
 
       const activa = meta.estado === 'ACTIVA';
-      const cumplida = meta.estado === 'CUMPLIDA';
-
-      const etiqueta = cumplida
-        ? 'Cumplida'
-        : meta.estado === 'INACTIVA'
-          ? 'Inactiva'
-          : 'En progreso';
 
       return `
         <article class="pm-tarjeta">
-
           <div class="pm-fila">
             <strong>
               ${esc(meta.nombre_meta)}
             </strong>
 
             <span class="pm-etiqueta">
-              ${etiqueta}
+              ${
+                meta.estado === 'CUMPLIDA'
+                  ? 'Cumplida'
+                  : meta.estado === 'INACTIVA'
+                    ? 'Inactiva'
+                    : 'En progreso'
+              }
             </span>
           </div>
 
@@ -888,42 +970,68 @@ export async function render(c) {
 
             <span class="pm-nota">
               de ${cop(objetivo)}
+              · ${pct.toFixed(1)}%
             </span>
           </div>
 
           <div
             class="pm-barra"
             role="img"
-            aria-label="${
-              porcentaje === null
-                ? 'Porcentaje no disponible'
-                : porcentaje.toFixed(1) + '% ahorrado'
-            }"
+            aria-label="${pct.toFixed(1)}% de la meta"
           >
             <span
-              style="width:${progreso}%"
+              style="width:${ancho(pct)}%"
             ></span>
           </div>
 
-          <div class="pm-fila">
-            <span class="pm-nota">
+          <p class="pm-nota">
+            Reservado en cuentas:
+            <strong class="monto">
               ${
-                cumplida
-                  ? 'Objetivo alcanzado'
-                  : `Faltan ${cop(faltante)}`
+                vinculado === null
+                  ? 'Sin verificar'
+                  : cop(vinculado)
               }
+            </strong>
+
+            · Aportes antiguos sin vincular:
+
+            <strong class="monto">
               ${
-                porcentaje === null
-                  ? ''
-                  : `· ${porcentaje.toFixed(1)}%`
+                anterior === null
+                  ? 'Sin verificar'
+                  : cop(anterior)
+              }
+            </strong>
+          </p>
+
+          ${
+            anterior > 0
+              ? `
+                <p class="pm-alerta">
+                  Tienes ahorro declarado anteriormente
+                  que todavía no está respaldado
+                  por una cuenta.
+                </p>
+              `
+              : ''
+          }
+
+          <p class="pm-nota">
+            Faltan
+            <span class="monto">
+              ${
+                cop(
+                  Math.max(
+                    0,
+                    objetivo - acumulado
+                  )
+                )
               }
             </span>
 
-            <span class="pm-nota">
-              Fecha objetivo:
-              ${esc(meta.fecha_objetivo)}
-            </span>
-          </div>
+            · Objetivo ${esc(meta.fecha_objetivo)}
+          </p>
 
           ${
             meta.descripcion
@@ -936,20 +1044,35 @@ export async function render(c) {
           }
 
           ${
-            meta.estado !== 'INACTIVA'
-              ? `
+            meta.estado === 'INACTIVA'
+              ? ''
+              : `
                 <div class="pm-acciones">
-
                   ${
                     activa
                       ? `
                         <button
                           type="button"
                           class="btn btn-primario btn-chico"
-                          data-meta="aportar"
+                          data-meta="reservar"
                           data-id="${id}"
                         >
-                          Registrar aporte
+                          Reservar dinero
+                        </button>
+                      `
+                      : ''
+                  }
+
+                  ${
+                    vinculado > 0
+                      ? `
+                        <button
+                          type="button"
+                          class="btn btn-chico"
+                          data-meta="liberar"
+                          data-id="${id}"
+                        >
+                          Liberar ahorro
                         </button>
                       `
                       : ''
@@ -978,29 +1101,28 @@ export async function render(c) {
                       `
                       : ''
                   }
-
                 </div>
               `
-              : ''
           }
-
         </article>
       `;
     }).join('');
   }
 
 
-  // ------------------------------------
-  // VENTANA COMPARTIDA
-  // ------------------------------------
+  // ----------------------------------
+  // MODAL COMPARTIDO
+  // ----------------------------------
 
   function abrirModal(
     titulo,
     tipo,
     contenido,
-    botonTexto,
+    textoBoton,
     atributos = ''
   ) {
+    intentoIncierto = null;
+
     modal.innerHTML = `
       <form
         id="pm-form"
@@ -1009,7 +1131,6 @@ export async function render(c) {
         ${atributos}
         novalidate
       >
-
         <div class="pm-modal-cabeza">
           <h2 id="pm-modal-titulo">
             ${esc(titulo)}
@@ -1048,10 +1169,9 @@ export async function render(c) {
             type="submit"
             class="btn btn-primario"
           >
-            ${esc(botonTexto)}
+            ${esc(textoBoton)}
           </button>
         </div>
-
       </form>
     `;
 
@@ -1063,77 +1183,104 @@ export async function render(c) {
   }
 
 
-  function campoMonto(valor = '') {
+  function campoMonto(
+    nombre,
+    valor = '',
+    titulo = 'Monto (COP)'
+  ) {
     return `
       <div class="campo">
         <label for="pm-monto">
-          Monto (COP)
+          ${esc(titulo)}
         </label>
 
         <input
           id="pm-monto"
-          name="monto"
+          name="${nombre}"
           inputmode="decimal"
           autocomplete="off"
-          placeholder="Ej. 100000"
           value="${esc(valor)}"
+          placeholder="Ej. 100000"
           required
         >
 
         <small class="ayuda">
-          Sin puntos de miles.
-          Máximo dos decimales.
+          Sin separadores de miles,
+          máximo dos decimales.
         </small>
       </div>
     `;
   }
 
 
-  // ------------------------------------
-  // MODAL CREAR/EDITAR PRESUPUESTO
-  // ------------------------------------
+  function opcionesCuentas(cuentas, limites) {
+    return `
+      <option value="">
+        Selecciona una cuenta…
+      </option>
 
-  function modalPresupuesto(
+      ${
+        cuentas.map(s => {
+          const max = num(
+            limites.get(Number(s.id_cuenta)) || 0
+          );
+
+          return `
+            <option
+              value="${Number(s.id_cuenta)}"
+              data-max="${max}"
+            >
+              ${esc(s.nombre_cuenta)}
+              · ${cop(max)} disponibles
+            </option>
+          `;
+        }).join('')
+      }
+    `;
+  }
+
+
+  // ----------------------------------
+  // FORMULARIO PRESUPUESTOS
+  // ----------------------------------
+
+  function formularioPresupuesto(
     tipo,
     opciones = [],
-    presupuesto = null
+    p = null
   ) {
-    const editando = tipo === 'pres-editar';
+    const editar = tipo === 'pres-editar';
 
-    const id = editando
-      ? Number(presupuesto.id_presupuesto)
-      : 0;
+    const id = Number(
+      p?.id_presupuesto || 0
+    );
 
-    const calculo = editando
-      ? planificacion.presupuestos.find(
-          p => Number(p.id_presupuesto) === id
-        )
-      : null;
-
-    const nombre = calculo?.categoria ||
-      `Categoría #${presupuesto?.id_categoria ?? ''}`;
-
-    const opcionesHTML = opciones.map(cat => `
-      <option value="${Number(cat.id_categoria)}">
-        ${esc(cat.nombre_categoria)}
-      </option>
-    `).join('');
+    const calc = planificacion.presupuestos.find(
+      x => Number(x.id_presupuesto) === id
+    );
 
     abrirModal(
-      editando
+      editar
         ? 'Editar presupuesto'
         : 'Nuevo presupuesto',
       tipo,
       `
         <p class="pm-modal-nota">
-          Período: ${esc(periodoTexto())}
+          Período: ${esc(periodo())}.
+          Cambiar el límite no mueve dinero.
         </p>
 
         ${
-          editando
+          editar
             ? `
-              <p>
-                Categoría: <strong>${esc(nombre)}</strong>
+              <p class="pm-nota">
+                Categoría:
+                ${
+                  esc(
+                    calc?.categoria ||
+                    'Categoría #' + p.id_categoria
+                  )
+                }
               </p>
             `
             : `
@@ -1151,18 +1298,30 @@ export async function render(c) {
                     Selecciona una categoría…
                   </option>
 
-                  ${opcionesHTML}
+                  ${
+                    opciones.map(x => `
+                      <option value="${
+                        Number(x.id_categoria)
+                      }">
+                        ${esc(x.nombre_categoria)}
+                      </option>
+                    `).join('')
+                  }
                 </select>
               </div>
             `
         }
 
-        ${campoMonto(
-          editando ? presupuesto.monto_limite : ''
-        )}
+        ${
+          campoMonto(
+            'monto_limite',
+            editar ? p.monto_limite : '',
+            'Límite mensual (COP)'
+          )
+        }
 
         ${
-          !editando && !opciones.length
+          !editar && !opciones.length
             ? `
               <p class="pm-error">
                 No hay categorías disponibles
@@ -1172,13 +1331,17 @@ export async function render(c) {
             : ''
         }
       `,
-      editando
+      editar
         ? 'Guardar cambios'
         : 'Crear presupuesto',
-      `data-id="${id}" data-mes="${mes}" data-anio="${anio}"`
+      `
+        data-id="${id}"
+        data-anio="${anio}"
+        data-mes="${mes}"
+      `
     );
 
-    if (!editando && !opciones.length) {
+    if (!editar && !opciones.length) {
       modal.querySelector(
         'button[type="submit"]'
       ).disabled = true;
@@ -1186,150 +1349,406 @@ export async function render(c) {
   }
 
 
-  // ------------------------------------
-  // MODAL CREAR/EDITAR META
-  // ------------------------------------
+  function fechaDefecto() {
+    const fecha = new Date();
 
-  function modalMeta(
-    tipo,
-    meta = null
-  ) {
-    const editando = tipo === 'meta-editar';
+    fecha.setDate(
+      fecha.getDate() + 90
+    );
+
+    const dos = x =>
+      String(x).padStart(2, '0');
+
+    return (
+      `${fecha.getFullYear()}-` +
+      `${dos(fecha.getMonth() + 1)}-` +
+      `${dos(fecha.getDate())}`
+    );
+  }
+
+
+  // ----------------------------------
+  // FORMULARIO METAS
+  // ----------------------------------
+
+  function formularioMeta(tipo, meta = null) {
+    const editar = tipo === 'meta-editar';
+
+    metaEditada = editar ? meta : null;
+
+    const limites = new Map(
+      saldos
+        .filter(s => s.estado === 'ACTIVA')
+        .map(s => [
+          Number(s.id_cuenta),
+          Math.max(
+            0,
+            num(s.saldo_libre)
+          )
+        ])
+    );
 
     abrirModal(
-      editando ? 'Editar meta' : 'Nueva meta',
+      editar ? 'Editar meta' : 'Nueva meta',
       tipo,
       `
         <div class="campo">
-          <label for="pm-meta-nombre">
+          <label for="pm-nombre-meta">
             Nombre de la meta
           </label>
 
           <input
-            id="pm-meta-nombre"
+            id="pm-nombre-meta"
             name="nombre_meta"
             maxlength="80"
-            value="${esc(meta?.nombre_meta || '')}"
-            placeholder="Ej. Fondo de emergencias"
+            value="${
+              esc(meta?.nombre_meta || '')
+            }"
+            placeholder="Ej. Comprar computador"
             required
           >
         </div>
 
-        <div class="campo">
-          <label for="pm-monto">
-            Monto objetivo (COP)
-          </label>
-
-          <input
-            id="pm-monto"
-            name="monto"
-            inputmode="decimal"
-            value="${esc(meta?.monto_objetivo || '')}"
-            placeholder="Ej. 2000000"
-            required
-          >
-        </div>
+        ${
+          campoMonto(
+            'monto_objetivo',
+            meta?.monto_objetivo || '',
+            'Monto objetivo (COP)'
+          )
+        }
 
         <div class="campo">
-          <label for="pm-meta-fecha">
+          <label for="pm-fecha">
             Fecha objetivo
           </label>
 
           <input
-            id="pm-meta-fecha"
+            id="pm-fecha"
             name="fecha_objetivo"
             type="date"
-            value="${esc(
-              meta?.fecha_objetivo ||
-              fechaPorDefecto()
-            )}"
+            value="${
+              esc(
+                meta?.fecha_objetivo ||
+                fechaDefecto()
+              )
+            }"
             required
           >
         </div>
 
         <div class="campo">
-          <label for="pm-meta-desc">
+          <label for="pm-descripcion">
             Descripción (opcional)
           </label>
 
           <textarea
-            id="pm-meta-desc"
+            id="pm-descripcion"
             name="descripcion"
             maxlength="255"
             rows="3"
           >${esc(meta?.descripcion || '')}</textarea>
         </div>
 
-        <p class="pm-modal-nota">
-          ${
-            editando
-              ? (
-                  'Puedes modificar el objetivo, ' +
-                  'pero no reducirlo por debajo ' +
-                  'del acumulado actual: ' +
-                  cop(meta.monto_acumulado)
-                )
-              : (
-                  'La meta comienza con $0. ' +
-                  'Los aportes se registran después.'
-                )
-          }
-        </p>
+        ${
+          editar
+            ? `
+              <p class="pm-modal-nota">
+                Acumulado actual:
+                ${cop(meta.monto_acumulado)}.
+
+                El objetivo no puede ser menor.
+              </p>
+            `
+            : `
+              <div class="campo">
+                <label for="pm-reserva-ahora">
+                  ¿Reservar dinero ahora? *
+                </label>
+
+                <select
+                  id="pm-reserva-ahora"
+                  name="reserva_ahora"
+                  required
+                >
+                  <option value="">
+                    Selecciona una opción…
+                  </option>
+
+                  <option value="si">
+                    Sí, reservar desde una cuenta
+                  </option>
+
+                  <option value="no">
+                    No, reservaré después
+                  </option>
+                </select>
+              </div>
+
+              <div
+                id="pm-reserva-inicial"
+                class="pm-condicional"
+                hidden
+              >
+                <div class="campo">
+                  <label for="pm-cuenta">
+                    Cuenta financiera
+                  </label>
+
+                  <select
+                    id="pm-cuenta"
+                    name="id_cuenta"
+                  >
+                    ${
+                      opcionesCuentas(
+                        saldos.filter(
+                          s => s.estado === 'ACTIVA'
+                        ),
+                        limites
+                      )
+                    }
+                  </select>
+                </div>
+
+                ${
+                  campoMonto(
+                    'monto_reserva',
+                    '',
+                    'Cantidad para reservar (COP)'
+                  )
+                }
+
+                <p class="pm-nota">
+                  La creación y la reserva son
+                  solicitudes separadas. Si la
+                  reserva falla, la meta continuará
+                  creada.
+                </p>
+              </div>
+
+              <p class="pm-modal-nota">
+                Reservar no cambia el saldo real;
+                reduce el saldo libre.
+              </p>
+            `
+        }
       `,
-      editando ? 'Guardar cambios' : 'Crear meta',
-      `data-id="${Number(meta?.id_meta || 0)}"`
+      editar
+        ? 'Guardar cambios'
+        : 'Crear meta',
+      `
+        data-id="${
+          Number(meta?.id_meta || 0)
+        }"
+
+        data-uuid="${
+          editar ? '' : nuevoUUID()
+        }"
+      `
     );
+
+    if (!editar) {
+      modal.querySelector(
+        'button[type="submit"]'
+      ).disabled = true;
+    }
   }
 
 
-  // ------------------------------------
-  // MODAL REGISTRAR APORTE
-  // ------------------------------------
+  // ----------------------------------
+  // RESERVAS POR CUENTA
+  // ----------------------------------
 
-  function modalAporte(meta) {
+  function porCuenta(detalle) {
+    const map = new Map();
+
+    for (const evento of detalle.registros) {
+      if (evento.estado !== 'ACTIVO') {
+        continue;
+      }
+
+      const id = Number(evento.id_cuenta);
+      const previo = map.get(id) || 0;
+
+      map.set(
+        id,
+        previo + (
+          evento.tipo === 'RESERVA'
+            ? num(evento.monto)
+            : -num(evento.monto)
+        )
+      );
+    }
+
+    return map;
+  }
+
+
+  function formularioReserva(
+    tipo,
+    meta,
+    detalle,
+    cuentas
+  ) {
+    const liberar = tipo === 'meta-liberar';
+
     const faltante = Math.max(
       0,
-      numero(meta.monto_objetivo) -
-      numero(meta.monto_acumulado)
+      num(meta.monto_objetivo) -
+      num(meta.monto_acumulado)
+    );
+
+    const limites = liberar
+      ? porCuenta(detalle)
+      : new Map(
+          cuentas.map(x => [
+            Number(x.id_cuenta),
+            Math.max(
+              0,
+              num(x.saldo_libre)
+            )
+          ])
+        );
+
+    const candidatas = cuentas.filter(
+      s =>
+        s.estado === 'ACTIVA' &&
+        num(
+          limites.get(Number(s.id_cuenta))
+        ) > 0
     );
 
     abrirModal(
-      'Registrar aporte',
-      'meta-aportar',
+      liberar
+        ? 'Liberar ahorro'
+        : 'Reservar para la meta',
+      tipo,
       `
         <p class="pm-modal-nota">
-          Meta: <strong>${esc(meta.nombre_meta)}</strong>
+          <strong>
+            ${esc(meta.nombre_meta)}
+          </strong>
 
           <br>
 
-          Acumulado actual:
+          Acumulado:
           ${cop(meta.monto_acumulado)}
+          de ${cop(meta.monto_objetivo)}
 
           <br>
 
-          Pendiente:
-          ${cop(faltante)}
+          ${
+            liberar
+              ? (
+                  'Libera únicamente dinero ' +
+                  'reservado en la cuenta elegida.'
+                )
+              : (
+                  'Pendiente del objetivo: ' +
+                  cop(faltante)
+                )
+          }
         </p>
 
-        ${campoMonto()}
+        <div class="campo">
+          <label for="pm-cuenta">
+            Cuenta ${
+              liberar
+                ? 'de la reserva'
+                : 'desde la que reservarás'
+            }
+          </label>
+
+          <select
+            id="pm-cuenta"
+            name="id_cuenta"
+            required
+          >
+            ${
+              opcionesCuentas(
+                candidatas,
+                limites
+              )
+            }
+          </select>
+        </div>
+
+        ${campoMonto('monto')}
 
         <p class="pm-nota">
-          Este aporte aumenta el progreso
-          declarado de la meta. No descuenta
-          dinero de una cuenta bancaria.
+          Esta operación cambia el dinero libre
+          y el avance de la meta, no el saldo
+          bancario real.
         </p>
+
+        ${
+          !candidatas.length
+            ? `
+              <p class="pm-error">
+                No hay cuentas disponibles
+                para esta operación.
+              </p>
+            `
+            : ''
+        }
       `,
-      'Registrar aporte',
-      `data-id="${Number(meta.id_meta)}"
-       data-acumulado="${esc(meta.monto_acumulado)}"
-       data-faltante="${faltante}"`
+      liberar
+        ? 'Liberar ahorro'
+        : 'Confirmar reserva',
+      `
+        data-id="${
+          Number(meta.id_meta)
+        }"
+
+        data-uuid="${
+          nuevoUUID()
+        }"
+
+        data-max-meta="${faltante}"
+      `
+    );
+
+    if (!candidatas.length) {
+      modal.querySelector(
+        'button[type="submit"]'
+      ).disabled = true;
+    }
+  }
+
+
+  async function prepararReserva(id, tipo) {
+    const [meta, detalle, cuentas] =
+      await Promise.all([
+        obtenerMeta(id),
+        obtenerDetalleReservasMeta(id),
+        obtenerSaldosReservados()
+      ]);
+
+    if (!mismaSesion()) return;
+
+    if (
+      meta.estado === 'INACTIVA' ||
+      (
+        tipo === 'meta-reservar' &&
+        meta.estado !== 'ACTIVA'
+      )
+    ) {
+      throw new Error(
+        'Esta meta no admite esa operación.'
+      );
+    }
+
+    formularioReserva(
+      tipo,
+      meta,
+      detalle,
+      cuentas
     );
   }
 
 
-  // ------------------------------------
+  // ----------------------------------
   // CAMBIO DE PERÍODO
-  // ------------------------------------
+  // ----------------------------------
 
   selectorMes.value = String(mes);
 
@@ -1339,34 +1758,35 @@ export async function render(c) {
   });
 
   selectorAnio.addEventListener('change', () => {
-    const valor = Number(selectorAnio.value);
+    const nuevo = Number(selectorAnio.value);
 
     if (
-      !Number.isInteger(valor) ||
-      valor < 2000 ||
-      valor > 9998
+      !Number.isInteger(nuevo) ||
+      nuevo < 2000 ||
+      nuevo > 9998
     ) {
       selectorAnio.value = String(anio);
 
       mensaje.textContent =
-        'Selecciona un año entre 2000 y 9998.';
+        'Selecciona un año válido ' +
+        'entre 2000 y 9998.';
+
       return;
     }
 
-    anio = valor;
+    anio = nuevo;
     mensaje.textContent = '';
+
     pintarPresupuestos();
   });
 
 
-  // ------------------------------------
+  // ----------------------------------
   // NUEVO PRESUPUESTO
-  // ------------------------------------
+  // ----------------------------------
 
-  nuevoPres.addEventListener('click', async () => {
+  botonPres.addEventListener('click', async () => {
     if (ocupada) return;
-
-    mensaje.textContent = '';
 
     if (!navigator.onLine) {
       mensaje.textContent =
@@ -1375,57 +1795,58 @@ export async function render(c) {
     }
 
     ocupada = true;
-    nuevoPres.disabled = true;
+    botonPres.disabled = true;
+    mensaje.textContent = '';
 
     try {
-      const categorias = await obtenerCategorias();
+      const cats = await obtenerCategorias();
 
-      if (!Array.isArray(categorias)) {
+      if (!Array.isArray(cats)) {
         throw new Error(
-          'No se pudieron consultar las categorías.'
+          'No se pudieron obtener categorías.'
         );
       }
 
-      const existentes = new Set(
+      if (!mismaSesion()) return;
+
+      const usadas = new Set(
         presupuestos
-          .filter(p =>
-            Number(p.mes) === mes &&
-            Number(p.anio) === anio
+          .filter(
+            p =>
+              Number(p.mes) === mes &&
+              Number(p.anio) === anio
           )
           .map(p => Number(p.id_categoria))
       );
 
-      const disponibles = categorias.filter(cat =>
-        cat.estado === 'ACTIVA' &&
-        cat.tipo_categoria === 'GASTO' &&
-        !existentes.has(Number(cat.id_categoria))
-      );
-
-      modalPresupuesto(
+      formularioPresupuesto(
         'pres-crear',
-        disponibles
+        cats.filter(
+          x =>
+            x.estado === 'ACTIVA' &&
+            x.tipo_categoria === 'GASTO' &&
+            !usadas.has(
+              Number(x.id_categoria)
+            )
+        )
       );
 
-    } catch (error) {
-      mostrarError(error);
+    } catch (e) {
+      mensaje.textContent = errorTexto(e);
 
     } finally {
       ocupada = false;
-      nuevoPres.disabled = false;
+      botonPres.disabled = false;
     }
   });
 
 
-  // ------------------------------------
-  // EDITAR PRESUPUESTO
-  // ------------------------------------
-
-  listaPres.addEventListener('click', event => {
-    const boton = event.target.closest(
+  listaPres.addEventListener('click', e => {
+    const btn = e.target.closest(
       'button[data-pres="editar"]'
     );
 
-    if (!boton || ocupada) return;
+    if (!btn || ocupada) return;
 
     if (!navigator.onLine) {
       mensaje.textContent =
@@ -1433,28 +1854,26 @@ export async function render(c) {
       return;
     }
 
-    const presupuesto = presupuestoPorId(
-      Number(boton.dataset.id)
+    const pres = presId(
+      Number(btn.dataset.id)
     );
 
-    if (presupuesto) {
-      modalPresupuesto(
+    if (pres) {
+      formularioPresupuesto(
         'pres-editar',
         [],
-        presupuesto
+        pres
       );
     }
   });
 
 
-  // ------------------------------------
+  // ----------------------------------
   // NUEVA META
-  // ------------------------------------
+  // ----------------------------------
 
-  nuevaMeta.addEventListener('click', () => {
+  botonMeta.addEventListener('click', async () => {
     if (ocupada) return;
-
-    mensaje.textContent = '';
 
     if (!navigator.onLine) {
       mensaje.textContent =
@@ -1462,25 +1881,44 @@ export async function render(c) {
       return;
     }
 
-    modalMeta('meta-crear');
+    ocupada = true;
+    botonMeta.disabled = true;
+    mensaje.textContent = '';
+
+    try {
+      const respuesta =
+        await obtenerSaldosReservados();
+
+      if (!mismaSesion()) return;
+
+      saldos = respuesta;
+      formularioMeta('meta-crear');
+
+    } catch (e) {
+      mensaje.textContent = errorTexto(e);
+
+    } finally {
+      ocupada = false;
+      botonMeta.disabled = false;
+    }
   });
 
 
-  // ------------------------------------
-  // ACCIONES DE METAS
-  // ------------------------------------
+  // ----------------------------------
+  // ACCIONES SOBRE METAS
+  // ----------------------------------
 
-  listaMetas.addEventListener('click', async event => {
-    const boton = event.target.closest(
+  listaMetas.addEventListener('click', async e => {
+    const btn = e.target.closest(
       'button[data-meta]'
     );
 
-    if (!boton || ocupada) return;
+    if (!btn || ocupada) return;
 
-    const id = Number(boton.dataset.id);
-    const accion = boton.dataset.meta;
+    const id = Number(btn.dataset.id);
+    const accion = btn.dataset.meta;
 
-    if (!metaPorId(id)) return;
+    if (!metaId(id)) return;
 
     if (!navigator.onLine) {
       mensaje.textContent =
@@ -1489,35 +1927,33 @@ export async function render(c) {
     }
 
     if (accion === 'desactivar') {
-      const confirmar = window.confirm(
-        '¿Desactivar esta meta?\n\n' +
-        'Solo puede desactivarse cuando ' +
-        'no tiene aportes acumulados.'
-      );
-
-      if (!confirmar) return;
+      if (!window.confirm(
+        '¿Desactivar esta meta sin ahorro acumulado?'
+      )) {
+        return;
+      }
 
       ocupada = true;
-      boton.disabled = true;
+      btn.disabled = true;
 
       try {
         await desactivarMeta(id);
 
         aviso(
-          'Meta desactivada correctamente.',
+          'Meta desactivada.',
           'ok'
         );
 
         await cargarTodo();
 
-      } catch (error) {
-        mostrarError(error);
+      } catch (err) {
+        mensaje.textContent = errorTexto(err);
 
       } finally {
         ocupada = false;
 
-        if (boton.isConnected) {
-          boton.disabled = false;
+        if (btn.isConnected) {
+          btn.disabled = false;
         }
       }
 
@@ -1525,70 +1961,137 @@ export async function render(c) {
     }
 
     ocupada = true;
-    boton.disabled = true;
+    btn.disabled = true;
+    mensaje.textContent = '';
 
     try {
-      // Consultar la versión más reciente
-      // antes de preparar una edición o aporte.
-      const meta = await obtenerMeta(id);
+      if (accion === 'editar') {
+        const meta = await obtenerMeta(id);
 
-      if (
-        accion === 'editar' &&
-        meta.estado !== 'INACTIVA'
+        if (!mismaSesion()) return;
+
+        if (meta.estado === 'INACTIVA') {
+          throw new Error(
+            'La meta está inactiva.'
+          );
+        }
+
+        formularioMeta(
+          'meta-editar',
+          meta
+        );
+
+      } else if (
+        accion === 'reservar' ||
+        accion === 'liberar'
       ) {
-        modalMeta('meta-editar', meta);
+        await prepararReserva(
+          id,
+          `meta-${accion}`
+        );
       }
 
-      if (
-        accion === 'aportar' &&
-        meta.estado === 'ACTIVA'
-      ) {
-        modalAporte(meta);
-      }
-
-    } catch (error) {
-      mostrarError(error);
+    } catch (err) {
+      mensaje.textContent = errorTexto(err);
 
     } finally {
       ocupada = false;
 
-      if (boton.isConnected) {
-        boton.disabled = false;
+      if (btn.isConnected) {
+        btn.disabled = false;
       }
     }
   });
 
 
-  // ------------------------------------
-  // CERRAR VENTANA
-  // ------------------------------------
+  // ----------------------------------
+  // DECISIÓN RESERVA INICIAL
+  // ----------------------------------
 
-  modal.addEventListener('click', event => {
+  modal.addEventListener('change', e => {
+    if (
+      e.target.id !== 'pm-reserva-ahora'
+    ) {
+      return;
+    }
+
+    const form = modal.querySelector('#pm-form');
+
+    if (
+      !form ||
+      form.dataset.tipo !== 'meta-crear'
+    ) {
+      return;
+    }
+
+    const si = e.target.value === 'si';
+    const no = e.target.value === 'no';
+
+    form.querySelector(
+      '#pm-reserva-inicial'
+    ).hidden = !si;
+
+    form.querySelector(
+      'button[type="submit"]'
+    ).disabled = !(si || no);
+  });
+
+
+  // ----------------------------------
+  // CERRAR FORMULARIOS
+  // ----------------------------------
+
+  modal.addEventListener('click', e => {
     if (ocupada) return;
 
     if (
-      event.target === modal ||
-      event.target.closest('[data-cerrar]')
+      e.target === modal ||
+      e.target.closest('[data-cerrar]')
     ) {
-      cerrarModal();
+      if (
+        intentoIncierto &&
+        !window.confirm(
+          'Hay una operación sin confirmar. ' +
+          '¿Cerrar y comprobarla después?'
+        )
+      ) {
+        return;
+      }
+
+      intentoIncierto = null;
+
+      if (modal.open) {
+        modal.close();
+      }
     }
   });
 
-  modal.addEventListener('cancel', event => {
-    if (ocupada) event.preventDefault();
+  modal.addEventListener('cancel', e => {
+    if (
+      ocupada ||
+      (
+        intentoIncierto &&
+        !window.confirm(
+          'Hay una operación sin confirmar. ' +
+          '¿Cerrar y comprobarla después?'
+        )
+      )
+    ) {
+      e.preventDefault();
+    }
   });
 
 
-  // ------------------------------------
+  // ----------------------------------
   // GUARDAR FORMULARIOS
-  // ------------------------------------
+  // ----------------------------------
 
-  modal.addEventListener('submit', async event => {
-    const form = event.target.closest('#pm-form');
+  modal.addEventListener('submit', async e => {
+    const form = e.target.closest('#pm-form');
 
     if (!form) return;
 
-    event.preventDefault();
+    e.preventDefault();
 
     if (ocupada) return;
 
@@ -1604,164 +2107,250 @@ export async function render(c) {
       return;
     }
 
-    const tipo = form.dataset.tipo;
-    const id = Number(form.dataset.id || 0);
-
-    const monto = form.elements.monto
-      ? montoFormulario(form)
-      : '';
-
-    if (!montoValido(monto)) {
-      error.textContent =
-        'Escribe un monto válido mayor que cero, ' +
-        'sin puntos de miles y con máximo dos decimales.';
-      return;
-    }
-
+    let tipo = form.dataset.tipo;
+    let id = Number(form.dataset.id || 0);
     let datos = {};
 
-    if (tipo === 'pres-crear') {
-      const idCategoria = Number(
-        form.elements.id_categoria.value
+    const reintento =
+      intentoIncierto &&
+      intentoIncierto.form === form;
+
+    if (reintento) {
+      ({
+        tipo,
+        id,
+        datos
+      } = intentoIncierto);
+
+    } else {
+      const controlMonto =
+        form.elements.monto ||
+        form.elements.monto_limite ||
+        form.elements.monto_objetivo;
+
+      const monto = montoTexto(
+        controlMonto?.value
       );
 
-      if (
-        !Number.isSafeInteger(idCategoria) ||
-        idCategoria <= 0
-      ) {
+      if (!montoValido(monto)) {
         error.textContent =
-          'Selecciona una categoría de gasto.';
+          'Monto mayor que cero, sin separadores ' +
+          'de miles y máximo dos decimales.';
+
         return;
       }
 
-      datos = {
-        id_categoria: idCategoria,
-        anio: Number(form.dataset.anio),
-        mes: Number(form.dataset.mes),
-        monto_limite: monto
-      };
-    }
+      if (tipo === 'pres-crear') {
+        const cat = Number(
+          form.elements.id_categoria.value
+        );
 
-    if (tipo === 'pres-editar') {
-      datos = {
-        monto_limite: monto
-      };
-    }
-
-    if (
-      tipo === 'meta-crear' ||
-      tipo === 'meta-editar'
-    ) {
-      const nombre = form.elements.nombre_meta.value
-        .trim()
-        .replace(/\s+/g, ' ');
-
-      const fecha =
-        form.elements.fecha_objetivo.value;
-
-      const descripcion =
-        form.elements.descripcion.value.trim();
-
-      if (!nombre || nombre.length > 80) {
-        error.textContent =
-          'Escribe un nombre válido.';
-        return;
-      }
-
-      if (!fecha) {
-        error.textContent =
-          'Selecciona una fecha objetivo.';
-        return;
-      }
-
-      if (tipo === 'meta-crear') {
-        if (fecha < hoyISO()) {
+        if (
+          !Number.isSafeInteger(cat) ||
+          cat <= 0
+        ) {
           error.textContent =
-            'La fecha objetivo no puede ser pasada.';
+            'Selecciona una categoría.';
           return;
         }
 
         datos = {
-          nombre_meta: nombre,
-          monto_objetivo: monto,
-          fecha_objetivo: fecha,
-          descripcion: descripcion || null
+          id_categoria: cat,
+          anio: Number(form.dataset.anio),
+          mes: Number(form.dataset.mes),
+          monto_limite: monto
         };
 
-      } else {
-        const original = metaPorId(id);
+      } else if (tipo === 'pres-editar') {
+        datos = {
+          monto_limite: monto
+        };
 
-        if (!original) {
+      } else if (
+        tipo === 'meta-crear' ||
+        tipo === 'meta-editar'
+      ) {
+        const nombre = form.elements.nombre_meta.value
+          .trim()
+          .replace(/\s+/g, ' ');
+
+        const fecha =
+          form.elements.fecha_objetivo.value;
+
+        const desc =
+          form.elements.descripcion.value.trim();
+
+        if (
+          !nombre ||
+          nombre.length > 80 ||
+          !fecha
+        ) {
           error.textContent =
-            'No se encontró la meta.';
+            'Completa el nombre y la fecha.';
           return;
         }
 
-        if (
-          Number(monto) <
-          numero(original.monto_acumulado)
-        ) {
-          error.textContent =
-            'El objetivo no puede ser menor ' +
-            'que el acumulado.';
-          return;
-        }
-
-        // Enviar solamente campos modificados.
-        // Esto evita rechazar una edición de texto
-        // cuando una fecha objetivo anterior venció.
-        if (nombre !== original.nombre_meta) {
-          datos.nombre_meta = nombre;
-        }
-
-        if (
-          Number(monto) !==
-          numero(original.monto_objetivo)
-        ) {
-          datos.monto_objetivo = monto;
-        }
-
-        if (fecha !== original.fecha_objetivo) {
+        if (tipo === 'meta-crear') {
           if (fecha < hoyISO()) {
             error.textContent =
-              'La nueva fecha no puede ser pasada.';
+              'La fecha objetivo no puede ser pasada.';
             return;
           }
 
-          datos.fecha_objetivo = fecha;
+          const eleccion =
+            form.elements.reserva_ahora.value;
+
+          if (
+            !['si', 'no'].includes(eleccion)
+          ) {
+            error.textContent =
+              'Debes decidir si reservarás dinero ahora.';
+            return;
+          }
+
+          if (eleccion === 'si') {
+            const cuenta = Number(
+              form.elements.id_cuenta.value
+            );
+
+            const cantidad = montoTexto(
+              form.elements.monto_reserva.value
+            );
+
+            const max = num(
+              form.elements.id_cuenta
+                .selectedOptions[0]?.dataset.max
+            );
+
+            if (
+              !Number.isSafeInteger(cuenta) ||
+              cuenta <= 0 ||
+              !montoValido(cantidad) ||
+              Number(cantidad) > max ||
+              Number(cantidad) > Number(monto)
+            ) {
+              error.textContent =
+                'Selecciona cuenta y reserva válidas, ' +
+                'sin superar el saldo libre ni el objetivo.';
+
+              return;
+            }
+
+            datos._reserva = {
+              uuid_operacion: form.dataset.uuid,
+              id_cuenta: cuenta,
+              monto: cantidad,
+              fecha_operacion: hoyISO()
+            };
+          }
+
+          Object.assign(datos, {
+            nombre_meta: nombre,
+            monto_objetivo: monto,
+            fecha_objetivo: fecha,
+            descripcion: desc || null
+          });
+
+        } else {
+          const original =
+            Number(metaEditada?.id_meta) === id
+              ? metaEditada
+              : metaId(id);
+
+          if (!original) {
+            error.textContent =
+              'Meta no encontrada.';
+            return;
+          }
+
+          if (
+            Number(monto) <
+            num(original.monto_acumulado)
+          ) {
+            error.textContent =
+              'El objetivo no puede ser menor al acumulado.';
+
+            return;
+          }
+
+          if (nombre !== original.nombre_meta) {
+            datos.nombre_meta = nombre;
+          }
+
+          if (
+            Number(monto) !==
+            num(original.monto_objetivo)
+          ) {
+            datos.monto_objetivo = monto;
+          }
+
+          if (fecha !== original.fecha_objetivo) {
+            if (fecha < hoyISO()) {
+              error.textContent =
+                'La nueva fecha no puede ser pasada.';
+              return;
+            }
+
+            datos.fecha_objetivo = fecha;
+          }
+
+          if (
+            desc !==
+            (original.descripcion || '')
+          ) {
+            datos.descripcion = desc || null;
+          }
+
+          if (!Object.keys(datos).length) {
+            error.textContent =
+              'No hay cambios para guardar.';
+            return;
+          }
         }
+
+      } else if (
+        tipo === 'meta-reservar' ||
+        tipo === 'meta-liberar'
+      ) {
+        const cuenta = Number(
+          form.elements.id_cuenta.value
+        );
+
+        const max = num(
+          form.elements.id_cuenta
+            .selectedOptions[0]?.dataset.max
+        );
 
         if (
-          descripcion !==
-          (original.descripcion || '')
+          !Number.isSafeInteger(cuenta) ||
+          cuenta <= 0 ||
+          Number(monto) > max ||
+          (
+            tipo === 'meta-reservar' &&
+            Number(monto) >
+            num(form.dataset.maxMeta)
+          )
         ) {
-          datos.descripcion = descripcion || null;
-        }
-
-        if (!Object.keys(datos).length) {
           error.textContent =
-            'No hay cambios para guardar.';
+            'El monto supera el saldo disponible ' +
+            'o no has seleccionado cuenta.';
+
           return;
         }
-      }
-    }
 
-    if (tipo === 'meta-aportar') {
-      const faltante = numero(
-        form.dataset.faltante
-      );
+        datos = {
+          uuid_operacion: form.dataset.uuid,
+          id_cuenta: cuenta,
+          monto,
+          fecha_operacion: hoyISO()
+        };
 
-      if (Number(monto) > faltante) {
+      } else {
         error.textContent =
-          `El aporte supera lo pendiente: ${cop(faltante)}.`;
+          'Operación no reconocida.';
+
         return;
       }
-
-      datos = {
-        monto,
-        acumulado_esperado:
-          form.dataset.acumulado
-      };
     }
 
     ocupada = true;
@@ -1770,50 +2359,84 @@ export async function render(c) {
       ...form.querySelectorAll('button')
     ];
 
-    botones.forEach(b => {
-      b.disabled = true;
-    });
+    botones.forEach(
+      b => b.disabled = true
+    );
 
+    let confirmada = false;
+    let parcial = false;
     let incierta = false;
-    let guardada = false;
 
     try {
       if (tipo === 'pres-crear') {
         await crearPresupuesto(datos);
 
       } else if (tipo === 'pres-editar') {
-        await actualizarPresupuesto(id, datos);
+        await actualizarPresupuesto(
+          id,
+          datos
+        );
 
       } else if (tipo === 'meta-crear') {
-        await crearMeta(datos);
+        const {
+          _reserva: reserva,
+          ...metaDatos
+        } = datos;
+
+        const creada = await crearMeta(
+          metaDatos
+        );
+
+        if (reserva) {
+          try {
+            await reservarDineroMeta(
+              creada.id_meta,
+              reserva
+            );
+
+          } catch (err) {
+            parcial = true;
+
+            mensaje.textContent =
+              err instanceof ErrorDeRed
+                ? (
+                    'Meta creada; no se confirmó ' +
+                    'la reserva. Comprueba su detalle ' +
+                    'antes de repetirla.'
+                  )
+                : (
+                    'Meta creada sin reserva inicial: ' +
+                    errorTexto(err) +
+                    '. Puedes reservar después.'
+                  );
+          }
+        }
 
       } else if (tipo === 'meta-editar') {
-        await actualizarMeta(id, datos);
+        await actualizarMeta(
+          id,
+          datos
+        );
 
-      } else if (tipo === 'meta-aportar') {
-        await aportarMeta(id, datos);
+      } else if (tipo === 'meta-reservar') {
+        await reservarDineroMeta(
+          id,
+          datos
+        );
 
-      } else {
-        throw new Error(
-          'Operación no válida.'
+      } else if (tipo === 'meta-liberar') {
+        await liberarDineroMeta(
+          id,
+          datos
         );
       }
 
-      guardada = true;
+      confirmada = true;
 
-      cerrarModal();
+    } catch (err) {
+      error.textContent = errorTexto(err);
 
-      aviso(
-        tipo === 'meta-aportar'
-          ? 'Progreso de la meta actualizado.'
-          : 'Cambios guardados correctamente.',
-        'ok'
-      );
-
-    } catch (errorSolicitud) {
-      mostrarError(errorSolicitud, error);
-
-      if (errorSolicitud instanceof ErrorDeRed) {
+      if (err instanceof ErrorDeRed) {
         incierta = true;
       }
 
@@ -1822,39 +2445,94 @@ export async function render(c) {
 
       botones.forEach(b => {
         if (b.isConnected) {
-          b.disabled =
-            incierta &&
-            b.type === 'submit';
+          b.disabled = false;
         }
       });
     }
 
-    if (guardada) {
+    if (confirmada) {
+      intentoIncierto = null;
+
+      if (modal.open) {
+        modal.close();
+      }
+
+      if (!parcial) {
+        aviso(
+          'Operación guardada correctamente.',
+          'ok'
+        );
+      }
+
       try {
         await cargarTodo();
 
-      } catch (errorRecarga) {
+      } catch {
         mensaje.textContent =
-          'La operación se guardó, pero no se ' +
-          'pudo actualizar la pantalla. ' +
-          'Recarga la vista cuando tengas conexión.';
+          'Se guardó, pero no se pudo actualizar ' +
+          'la pantalla. Recarga al tener conexión.';
+      }
 
-        console.warn(errorRecarga);
+    } else if (incierta) {
+      if (
+        tipo === 'meta-reservar' ||
+        tipo === 'meta-liberar'
+      ) {
+        intentoIncierto = {
+          form,
+          tipo,
+          id,
+          datos
+        };
+
+        form.querySelectorAll(
+          'input,select,textarea'
+        ).forEach(
+          el => el.disabled = true
+        );
+
+        const submit = form.querySelector(
+          'button[type="submit"]'
+        );
+
+        submit.textContent =
+          'Reintentar misma operación';
+
+        submit.disabled = false;
+
+        error.textContent =
+          'Respuesta incierta: puedes reintentar ' +
+          'exactamente la misma operación ' +
+          'con el mismo UUID.';
+
+      } else {
+        form.querySelector(
+          'button[type="submit"]'
+        ).disabled = true;
+
+        error.textContent =
+          'Sin confirmación. Consulta las metas ' +
+          'o presupuestos antes de crear otra operación.';
       }
     }
   });
 
 
-  // ------------------------------------
+  // ----------------------------------
   // CARGA INICIAL
-  // ------------------------------------
+  // ----------------------------------
 
   try {
     await cargarTodo();
 
-  } catch (error) {
-    listaPres.innerHTML = errorCarga(error);
-    listaMetas.innerHTML = errorCarga(error);
-    mostrarError(error);
+  } catch (e) {
+    listaPres.innerHTML = errorCarga(e);
+
+    resumenReservas.textContent =
+      'No se pudo verificar el total reservado.';
+
+    listaMetas.innerHTML = errorCarga(e);
+
+    mensaje.textContent = errorTexto(e);
   }
 }

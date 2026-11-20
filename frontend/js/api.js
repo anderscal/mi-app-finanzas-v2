@@ -3,14 +3,8 @@
 
 // API centralizada de la PWA Finanzas Personales.
 
-
 import { CONFIG } from './config.js';
-
-import {
-  obtenerToken,
-  cerrarSesion
-} from './sesion.js';
-
+import { obtenerToken, cerrarSesion } from './sesion.js';
 
 export class ErrorApi extends Error {
   constructor(estado, mensaje) {
@@ -19,16 +13,12 @@ export class ErrorApi extends Error {
   }
 }
 
-
 export class ErrorDeRed extends Error {}
-
 
 function mensajeDeError(cuerpo, estado) {
   const detalle = cuerpo?.detail;
 
-  if (typeof detalle === 'string') {
-    return detalle;
-  }
+  if (typeof detalle === 'string') return detalle;
 
   if (Array.isArray(detalle) && detalle.length) {
     return detalle.map(e => {
@@ -49,7 +39,6 @@ function mensajeDeError(cuerpo, estado) {
   return `Error del servidor: ${estado}`;
 }
 
-
 async function solicitar(
   ruta,
   {
@@ -65,13 +54,12 @@ async function solicitar(
   if (json !== undefined) {
     headers['Content-Type'] = 'application/json';
     body = JSON.stringify(json);
+
   } else if (formulario !== undefined) {
     headers['Content-Type'] =
       'application/x-www-form-urlencoded';
 
-    body = new URLSearchParams(
-      formulario
-    ).toString();
+    body = new URLSearchParams(formulario).toString();
   }
 
   if (conToken) {
@@ -79,6 +67,7 @@ async function solicitar(
 
     if (!token) {
       location.hash = '#/login';
+
       throw new ErrorApi(
         401,
         'Tu sesión venció. Inicia sesión nuevamente.'
@@ -99,6 +88,7 @@ async function solicitar(
         body
       }
     );
+
   } catch {
     throw new ErrorDeRed(
       'No hay conexión con el servidor.'
@@ -110,7 +100,7 @@ async function solicitar(
   try {
     datos = await respuesta.json();
   } catch {
-    // Respuesta sin cuerpo JSON.
+    // Respuesta sin JSON.
   }
 
   if (!respuesta.ok) {
@@ -190,9 +180,10 @@ export function actualizarCuentaFinanciera(id, datos) {
 }
 
 export function desactivarCuentaFinanciera(id) {
-  return solicitar(`/cuentas/${id}/desactivar`, {
-    metodo: 'POST'
-  });
+  return solicitar(
+    `/cuentas/${id}/desactivar`,
+    { metodo: 'POST' }
+  );
 }
 
 
@@ -206,9 +197,10 @@ export function crearMovimientoNormal(datos) {
 }
 
 export function anularMovimiento(id) {
-  return solicitar(`/movimientos/${id}/anular`, {
-    metodo: 'POST'
-  });
+  return solicitar(
+    `/movimientos/${id}/anular`,
+    { metodo: 'POST' }
+  );
 }
 
 
@@ -232,7 +224,9 @@ export function crearTransferencia({
     aplica_gmf
   };
 
-  if (motivo) datos.motivo = motivo;
+  if (motivo) {
+    datos.motivo = motivo;
+  }
 
   return solicitar('/transferencias/', {
     metodo: 'POST',
@@ -262,9 +256,10 @@ export function actualizarObligacion(id, datos) {
 }
 
 export function desactivarObligacion(id) {
-  return solicitar(`/obligaciones/${id}/desactivar`, {
-    metodo: 'POST'
-  });
+  return solicitar(
+    `/obligaciones/${id}/desactivar`,
+    { metodo: 'POST' }
+  );
 }
 
 export function registrarAbono({
@@ -329,9 +324,10 @@ export function actualizarCategoriaFinanciera(id, datos) {
 }
 
 export function desactivarCategoriaFinanciera(id) {
-  return solicitar(`/categorias/${id}/desactivar`, {
-    metodo: 'POST'
-  });
+  return solicitar(
+    `/categorias/${id}/desactivar`,
+    { metodo: 'POST' }
+  );
 }
 
 
@@ -356,7 +352,7 @@ export function actualizarPresupuesto(id, datos) {
 }
 
 
-// METAS DE AHORRO — PASO 25
+// METAS
 
 export function obtenerMetas() {
   return solicitar('/metas/');
@@ -380,6 +376,15 @@ export function actualizarMeta(id, datos) {
   });
 }
 
+export function desactivarMeta(id) {
+  return solicitar(
+    `/metas/${id}/desactivar`,
+    { metodo: 'POST' }
+  );
+}
+
+// Compatibilidad temporal con el backend del paso 25.
+// La nueva interfaz ya no utiliza aportes sin cuenta.
 export function aportarMeta(id, datos) {
   return solicitar(`/metas/${id}/aportes`, {
     metodo: 'POST',
@@ -387,8 +392,27 @@ export function aportarMeta(id, datos) {
   });
 }
 
-export function desactivarMeta(id) {
-  return solicitar(`/metas/${id}/desactivar`, {
-    metodo: 'POST'
+
+// RESERVAS VINCULADAS A CUENTAS — 25.1B
+
+export function obtenerSaldosReservados() {
+  return solicitar('/metas/reservas/cuentas');
+}
+
+export function obtenerDetalleReservasMeta(id) {
+  return solicitar(`/metas/${id}/reservas`);
+}
+
+export function reservarDineroMeta(id, datos) {
+  return solicitar(`/metas/${id}/reservas`, {
+    metodo: 'POST',
+    json: datos
+  });
+}
+
+export function liberarDineroMeta(id, datos) {
+  return solicitar(`/metas/${id}/liberaciones`, {
+    metodo: 'POST',
+    json: datos
   });
 }

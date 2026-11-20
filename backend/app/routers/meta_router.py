@@ -26,12 +26,30 @@ from app.business.meta_service import (
     desactivar_meta,
 )
 
+from app.schemas.meta_reserva_schema import (
+    OperacionReservaCrear,
+    OperacionReservaRespuesta,
+    SaldoReservaCuentaRespuesta,
+    DetalleReservasMetaRespuesta,
+)
+
+from app.business.meta_reserva_service import (
+    reservar_dinero_meta,
+    liberar_dinero_meta,
+    consultar_saldos_reservados,
+    consultar_detalle_reservas,
+)
+
 
 router = APIRouter(
     prefix="/metas",
     tags=["Metas de ahorro"]
 )
 
+
+# --------------------------------------
+# CONSULTAS GENERALES
+# --------------------------------------
 
 @router.get(
     "/",
@@ -63,6 +81,84 @@ def crear(
         datos
     )
 
+
+# Esta ruta debe quedar antes de
+# las rutas que utilizan {id_meta}.
+@router.get(
+    "/reservas/cuentas",
+    response_model=list[SaldoReservaCuentaRespuesta]
+)
+def saldos_con_reservas(
+    db: SesionBD,
+    usuario: UsuarioActual
+):
+    return consultar_saldos_reservados(
+        db,
+        usuario.id_usuario
+    )
+
+
+# --------------------------------------
+# RESERVAS Y LIBERACIONES
+# --------------------------------------
+
+@router.get(
+    "/{id_meta}/reservas",
+    response_model=DetalleReservasMetaRespuesta
+)
+def detalle_reservas(
+    id_meta: int,
+    db: SesionBD,
+    usuario: UsuarioActual
+):
+    return consultar_detalle_reservas(
+        db,
+        usuario.id_usuario,
+        id_meta
+    )
+
+
+@router.post(
+    "/{id_meta}/reservas",
+    response_model=OperacionReservaRespuesta,
+    status_code=status.HTTP_201_CREATED
+)
+def reservar(
+    id_meta: int,
+    datos: OperacionReservaCrear,
+    db: SesionBD,
+    usuario: UsuarioActual
+):
+    return reservar_dinero_meta(
+        db,
+        usuario.id_usuario,
+        id_meta,
+        datos
+    )
+
+
+@router.post(
+    "/{id_meta}/liberaciones",
+    response_model=OperacionReservaRespuesta,
+    status_code=status.HTTP_201_CREATED
+)
+def liberar(
+    id_meta: int,
+    datos: OperacionReservaCrear,
+    db: SesionBD,
+    usuario: UsuarioActual
+):
+    return liberar_dinero_meta(
+        db,
+        usuario.id_usuario,
+        id_meta,
+        datos
+    )
+
+
+# --------------------------------------
+# FUNCIONES EXISTENTES DE METAS
+# --------------------------------------
 
 @router.get(
     "/{id_meta}",
@@ -98,6 +194,12 @@ def editar(
     )
 
 
+# Ruta del paso 25.
+# Se conserva temporalmente para mantener
+# compatibilidad con la PWA actual.
+#
+# En 25.1B reemplazaremos este flujo por
+# reservas vinculadas a cuentas.
 @router.post(
     "/{id_meta}/aportes",
     response_model=MetaAporteRespuesta

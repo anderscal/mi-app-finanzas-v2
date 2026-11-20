@@ -8,3 +8,6 @@ from app.models.obligacion_financiera import ObligacionFinanciera
 from app.models.transferencia import Transferencia
 from app.models.movimiento import Movimiento
 from app.models.token_recuperacion import TokenRecuperacion
+
+# Paso 25.1A: reservas de dinero para metas.
+from app.models.aporte_meta import AporteMeta

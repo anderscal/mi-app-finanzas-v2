@@ -27,12 +27,15 @@ from app.persistence.obligacion_admin_repository import (
 from app.persistence.movimiento_escritura_repository import (
     bloquear_cuenta,
     buscar_movimiento_uuid,
-    calcular_saldo_cuenta,
     agregar_movimiento,
 )
 
+from app.business.saldo_libre_service import (
+    exigir_saldo_libre,
+)
 
-GMF = Decimal("0.004")
+
+TASA_GMF = Decimal("0.004")
 
 DESCRIPCION_INICIAL = (
     "Capital inicial de obligación"
@@ -95,7 +98,9 @@ def _bloquear_obligacion_propia(
     return obligacion
 
 
-def _tipo_movimiento_inicial(tipo_obligacion: str) -> str:
+def _tipo_movimiento_inicial(
+    tipo_obligacion: str
+) -> str:
     if tipo_obligacion == "POR_PAGAR":
         return "INGRESO"
 
@@ -108,12 +113,14 @@ def _tipo_movimiento_inicial(tipo_obligacion: str) -> str:
     )
 
 
-def _calcular_gmf_inicial(datos: ObligacionCrear) -> Decimal:
+def _gmf_inicial(
+    datos: ObligacionCrear
+) -> Decimal:
     if not datos.aplica_gmf_inicial:
         return Decimal("0.00")
 
     return (
-        datos.monto_original * GMF
+        datos.monto_original * TASA_GMF
     ).quantize(
         Decimal("0.01"),
         rounding=ROUND_HALF_UP
@@ -175,7 +182,7 @@ def _buscar_creacion_existente(
         and movimiento.aplica_gmf
             == datos.aplica_gmf_inicial
         and movimiento.monto_gmf
-            == _calcular_gmf_inicial(datos)
+            == _gmf_inicial(datos)
         and obligacion.nombre_obligacion
             == datos.nombre_obligacion
         and obligacion.tipo_obligacion
@@ -193,9 +200,7 @@ def _buscar_creacion_existente(
     if not coincide:
         raise HTTPException(
             status_code=409,
-            detail=(
-                "UUID ya utilizado con datos diferentes"
-            )
+            detail="UUID ya utilizado con datos diferentes"
         )
 
     return obligacion
@@ -207,22 +212,20 @@ def crear_obligacion_financiera(
     datos: ObligacionCrear
 ):
     try:
-        # Serializar creaciones del mismo propietario.
         _bloquear_propietario(
             db,
             id_usuario
         )
 
-        # Primero reconocer un posible reintento.
-        existente_uuid = _buscar_creacion_existente(
+        existente = _buscar_creacion_existente(
             db,
             id_usuario,
             datos
         )
 
-        if existente_uuid is not None:
+        if existente is not None:
             db.rollback()
-            return existente_uuid
+            return existente
 
         duplicada = buscar_obligacion_duplicada(
             db,
@@ -243,8 +246,6 @@ def crear_obligacion_financiera(
         cuenta = None
         monto_gmf = Decimal("0.00")
 
-        # Si se va a mover dinero, bloquear primero
-        # la cuenta y verificar que tenga fondos.
         if datos.registrar_movimiento_inicial:
             cuenta = bloquear_cuenta(
                 db,
@@ -264,37 +265,30 @@ def crear_obligacion_financiera(
                     detail="La cuenta está inactiva"
                 )
 
-            monto_gmf = _calcular_gmf_inicial(datos)
+            monto_gmf = _gmf_inicial(
+                datos
+            )
 
+            # POR_COBRAR implica prestar dinero:
+            # salida de capital desde una cuenta.
             if datos.tipo_obligacion == "POR_COBRAR":
-                saldo = calcular_saldo_cuenta(
+                exigir_saldo_libre(
                     db,
-                    cuenta
+                    cuenta,
+                    datos.monto_original + monto_gmf
                 )
 
-                if saldo < (
-                    datos.monto_original + monto_gmf
-                ):
-                    raise HTTPException(
-                        status_code=409,
-                        detail=(
-                            "Saldo insuficiente para entregar "
-                            "el dinero prestado"
-                        )
-                    )
-
-            # Revisión adicional tras bloquear cuenta.
-            existente_uuid = _buscar_creacion_existente(
+            # Idempotencia después de bloquear.
+            existente = _buscar_creacion_existente(
                 db,
                 id_usuario,
                 datos
             )
 
-            if existente_uuid is not None:
+            if existente is not None:
                 db.rollback()
-                return existente_uuid
+                return existente
 
-        # Registrar la obligación.
         obligacion = ObligacionFinanciera(
             id_usuario=id_usuario,
             nombre_obligacion=datos.nombre_obligacion,
@@ -303,7 +297,7 @@ def crear_obligacion_financiera(
             fecha_inicio=datos.fecha_inicio,
             fecha_vencimiento=datos.fecha_vencimiento,
             descripcion=datos.descripcion,
-            estado="ACTIVA"
+            estado="ACTIVA",
         )
 
         insertar_obligacion(
@@ -311,7 +305,6 @@ def crear_obligacion_financiera(
             obligacion
         )
 
-        # Registrar el capital inicial en la cuenta.
         if datos.registrar_movimiento_inicial:
             movimiento = Movimiento(
                 uuid_local=datos.uuid_local_inicial,
@@ -328,7 +321,7 @@ def crear_obligacion_financiera(
                 descripcion=DESCRIPCION_INICIAL,
                 aplica_gmf=datos.aplica_gmf_inicial,
                 monto_gmf=monto_gmf,
-                estado="ACTIVO"
+                estado="ACTIVO",
             )
 
             agregar_movimiento(
@@ -336,8 +329,6 @@ def crear_obligacion_financiera(
                 movimiento
             )
 
-        # Una sola transacción:
-        # obligación y dinero se confirman juntos.
         db.commit()
         db.refresh(obligacion)
 
@@ -345,7 +336,6 @@ def crear_obligacion_financiera(
 
     except IntegrityError:
         db.rollback()
-
         raise HTTPException(
             status_code=409,
             detail=(
@@ -486,8 +476,6 @@ def desactivar_obligacion_financiera(
                 )
             )
 
-        # Incluye tanto abonos como capital inicial.
-        # No retirar obligaciones con dinero asociado.
         if contar_abonos_activos(
             db,
             id_obligacion
@@ -511,7 +499,9 @@ def desactivar_obligacion_financiera(
         db.rollback()
         raise HTTPException(
             status_code=409,
-            detail="Conflicto al desactivar la obligación"
+            detail=(
+                "Conflicto al desactivar la obligación"
+            )
         )
 
     except Exception:

@@ -8,8 +8,7 @@
 // permanecen en IndexedDB.
 
 
-
-const VERSION = 'fp-v21';
+const VERSION = 'fp-v26 ';
 
 const ARCHIVOS = [
   './',
@@ -26,6 +25,7 @@ const ARCHIVOS = [
   'js/offline-db.js',
   'js/sync.js',
   'js/util.js',
+  'js/saldo-consulta.js',
 
   'js/vistas/comun.js',
   'js/vistas/login.js',

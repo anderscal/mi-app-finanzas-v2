@@ -1,11 +1,16 @@
+
 from decimal import Decimal
-from sqlalchemy.orm import Session
+
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from app.models import CuentaFinanciera
-from app.schemas.cuenta_schema import CuentaCrear
-from app.schemas.cuenta_schema import CuentaActualizar
+
+from app.schemas.cuenta_schema import (
+    CuentaCrear,
+    CuentaActualizar,
+)
 
 from app.persistence.cuenta_repository import (
     obtener_cuentas_con_saldo,
@@ -14,36 +19,46 @@ from app.persistence.cuenta_repository import (
     bloquear_cuenta_usuario,
 )
 
-from app.persistence.movimiento_escritura_repository import (
-    calcular_saldo_cuenta,
+from app.business.saldo_libre_service import (
+    consultar_disponibilidad_cuenta,
 )
+
+
+CERO = Decimal("0.00")
+
 
 def consultar_resumen_cuentas(
     db: Session,
     id_usuario: int
 ):
     if id_usuario <= 0:
-        raise ValueError("El identificador debe ser positivo")
+        raise ValueError(
+            "El identificador debe ser positivo"
+        )
 
     registros = obtener_cuentas_con_saldo(
         db=db,
         id_usuario=id_usuario
     )
 
-    cuentas = [dict(registro) for registro in registros]
+    cuentas = [
+        dict(registro)
+        for registro in registros
+    ]
 
-    # El saldo general incluye todas las cuentas
-    # del usuario, incluso si estan inactivas.
     saldo_general = sum(
-        (cuenta["saldo_actual"] for cuenta in cuentas),
-        Decimal("0.00")
+        (
+            cuenta["saldo_actual"]
+            for cuenta in cuentas
+        ),
+        CERO
     )
 
     return {
         "id_usuario": id_usuario,
         "total_cuentas": len(cuentas),
         "saldo_general": saldo_general,
-        "cuentas": cuentas
+        "cuentas": cuentas,
     }
 
 
@@ -79,7 +94,7 @@ def crear_cuenta_financiera(
         tipo_cuenta=datos.tipo_cuenta,
         institucion=datos.institucion,
         saldo_inicial=datos.saldo_inicial,
-        estado="ACTIVA"
+        estado="ACTIVA",
     )
 
     try:
@@ -108,13 +123,16 @@ def crear_cuenta_financiera(
         db.rollback()
         raise
 
+
 def actualizar_cuenta_financiera(
     db: Session,
     id_usuario: int,
     id_cuenta: int,
     datos: CuentaActualizar
 ):
-    cambios = datos.model_dump(exclude_unset=True)
+    cambios = datos.model_dump(
+        exclude_unset=True
+    )
 
     if not cambios:
         raise HTTPException(
@@ -185,6 +203,7 @@ def actualizar_cuenta_financiera(
         db.rollback()
         raise
 
+
 def desactivar_cuenta_financiera(
     db: Session,
     id_usuario: int,
@@ -210,20 +229,46 @@ def desactivar_cuenta_financiera(
             )
 
         if cuenta.estado == "ACTIVA":
-
-            saldo_actual = calcular_saldo_cuenta(
-                db,
-                cuenta
+            disponibilidad = (
+                consultar_disponibilidad_cuenta(
+                    db,
+                    cuenta
+                )
             )
 
-            if saldo_actual != Decimal("0.00"):
+            reservado = disponibilidad[
+                "monto_reservado"
+            ]
+
+            if reservado > CERO:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "No puedes desactivar una cuenta "
+                        "que tiene dinero reservado "
+                        "para metas de ahorro. "
+                        "Libera primero "
+                        f"{reservado:.2f}"
+                    )
+                )
+
+            if reservado < CERO:
+                raise HTTPException(
+                    status_code=409,
+                    detail="La cuenta tiene reservas inconsistentes"
+                )
+
+            saldo_real = disponibilidad[
+                "saldo_real"
+            ]
+
+            if saldo_real != CERO:
                 raise HTTPException(
                     status_code=409,
                     detail=(
                         "No puedes desactivar una cuenta "
                         "con saldo diferente de cero. "
-                        "Saldo actual: " +
-                        str(saldo_actual)
+                        f"Saldo actual: {saldo_real:.2f}"
                     )
                 )
 
