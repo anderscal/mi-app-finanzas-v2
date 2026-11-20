@@ -1,3 +1,4 @@
+
 from decimal import Decimal
 
 from fastapi import HTTPException
@@ -16,21 +17,24 @@ from app.persistence.obligacion_escritura_repository import (
 )
 
 
+def tipo_abono_obligacion(obligacion) -> str:
+    if obligacion.tipo_obligacion == "POR_PAGAR":
+        return "GASTO"
+
+    if obligacion.tipo_obligacion == "POR_COBRAR":
+        return "INGRESO"
+
+    raise HTTPException(
+        status_code=409,
+        detail="Tipo de obligación no válido"
+    )
+
+
 def recalcular_estado_obligacion(
-    db: Sessio,
+    db: Session,
     obligacion
 ):
-    if obligacion.tipo_obligacion == "POR_PAGAR":
-        tipo = "GASTO"
-
-    elif obligacion.tipo_obligacion == "POR_COBRAR":
-        tipo = "INGRESO"
-
-    else:
-        raise HTTPException(
-            status_code=409,
-            detail="Tipo de obligación no válido"
-        )
+    tipo = tipo_abono_obligacion(obligacion)
 
     movimientos = obtener_abonos_obligacion(
         db,
@@ -52,10 +56,11 @@ def recalcular_estado_obligacion(
         - total_abonado
     )
 
-    if pendiente <= 0:
-        obligacion.estado = "SALDADA"
-    else:
-        obligacion.estado = "ACTIVA"
+    obligacion.estado = (
+        "SALDADA"
+        if pendiente <= Decimal("0.00")
+        else "ACTIVA"
+    )
 
 
 def anular_movimiento(
@@ -88,33 +93,28 @@ def anular_movimiento(
                 detail="El movimiento ya está anulado"
             )
 
-        # ---------------------------------
-        # CASO 1: MOVIMIENTO NORMAL
-        # ---------------------------------
+        # --------------------------------
+        # MOVIMIENTO NORMAL
+        # --------------------------------
 
         if movimiento.origen == "NORMAL":
-
             movimiento.estado = "ANULADO"
 
             db.commit()
 
             return {
-                "id_movimiento":
-                    movimiento.id_movimiento,
-
-                "estado":
-                    "ANULADO",
-
-                "mensaje":
+                "id_movimiento": movimiento.id_movimiento,
+                "estado": "ANULADO",
+                "mensaje": (
                     "Movimiento normal anulado correctamente"
+                )
             }
 
-        # ---------------------------------
-        # CASO 2: TRANSFERENCIA
-        # ---------------------------------
+        # --------------------------------
+        # TRANSFERENCIA INTERNA
+        # --------------------------------
 
         if movimiento.origen == "TRANSFERENCIA":
-
             if movimiento.id_transferencia is None:
                 raise HTTPException(
                     status_code=409,
@@ -154,26 +154,24 @@ def anular_movimiento(
             db.commit()
 
             return {
-                "id_movimiento":
-                    movimiento.id_movimiento,
-
-                "estado":
-                    "ANULADO",
-
-                "mensaje":
+                "id_movimiento": movimiento.id_movimiento,
+                "estado": "ANULADO",
+                "mensaje": (
                     "Transferencia anulada correctamente"
+                )
             }
 
-        # ---------------------------------
-        # CASO 3: OBLIGACIÓN
-        # ---------------------------------
+        # --------------------------------
+        # MOVIMIENTO DE OBLIGACIÓN
+        # --------------------------------
 
         if movimiento.origen == "OBLIGACION":
-
             if movimiento.id_obligacion is None:
                 raise HTTPException(
                     status_code=409,
-                    detail="Movimiento de obligación inconsistente"
+                    detail=(
+                        "Movimiento de obligación inconsistente"
+                    )
                 )
 
             obligacion = bloquear_obligacion_anulacion(
@@ -187,11 +185,26 @@ def anular_movimiento(
                     detail="Obligación no encontrada"
                 )
 
+            tipo_abono = tipo_abono_obligacion(
+                obligacion
+            )
+
+            # Los abonos y el capital inicial
+            # utilizan direcciones opuestas.
+            # Solo los abonos pueden anularse
+            # individualmente desde el historial.
+            if movimiento.tipo != tipo_abono:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "El movimiento inicial de una "
+                        "obligación no puede anularse "
+                        "por separado"
+                    )
+                )
+
             movimiento.estado = "ANULADO"
 
-            # Flush para que la consulta posterior
-            # vea el nuevo estado dentro de la
-            # misma transacción.
             db.flush()
 
             recalcular_estado_obligacion(
@@ -202,14 +215,11 @@ def anular_movimiento(
             db.commit()
 
             return {
-                "id_movimiento":
-                    movimiento.id_movimiento,
-
-                "estado":
-                    "ANULADO",
-
-                "mensaje":
-                    "Movimiento de obligación anulado correctamente"
+                "id_movimiento": movimiento.id_movimiento,
+                "estado": "ANULADO",
+                "mensaje": (
+                    "Abono de obligación anulado correctamente"
+                )
             }
 
         raise HTTPException(
@@ -217,12 +227,8 @@ def anular_movimiento(
             detail="Origen de movimiento no válido"
         )
 
-    except IntegrityError as error:
+    except IntegrityError:
         db.rollback()
-
-        print("\n=== ERROR POSTGRESQL ===")
-        print(error.orig)
-        print("========================\n")
 
         raise HTTPException(
             status_code=409,

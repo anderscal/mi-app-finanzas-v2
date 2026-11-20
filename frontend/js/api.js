@@ -3,6 +3,7 @@
 
 // API centralizada de la PWA Finanzas Personales.
 
+
 import { CONFIG } from './config.js';
 
 import {
@@ -30,13 +31,13 @@ function mensajeDeError(cuerpo, estado) {
   }
 
   if (Array.isArray(detalle) && detalle.length) {
-    return detalle.map(error => {
-      const campo = Array.isArray(error.loc)
-        ? error.loc[error.loc.length - 1]
+    return detalle.map(e => {
+      const campo = Array.isArray(e.loc)
+        ? e.loc[e.loc.length - 1]
         : '';
 
       const mensaje = String(
-        error.msg || 'Dato inválido'
+        e.msg || 'Dato inválido'
       ).replace(/^Value error, /, '');
 
       return campo && campo !== 'body'
@@ -45,7 +46,7 @@ function mensajeDeError(cuerpo, estado) {
     }).join(' · ');
   }
 
-  return `El servidor respondió con error ${estado}`;
+  return `Error del servidor: ${estado}`;
 }
 
 
@@ -58,18 +59,17 @@ async function solicitar(
     conToken = true
   } = {}
 ) {
-  const encabezados = {};
-  let cuerpo;
+  const headers = {};
+  let body;
 
   if (json !== undefined) {
-    encabezados['Content-Type'] = 'application/json';
-    cuerpo = JSON.stringify(json);
-
+    headers['Content-Type'] = 'application/json';
+    body = JSON.stringify(json);
   } else if (formulario !== undefined) {
-    encabezados['Content-Type'] =
+    headers['Content-Type'] =
       'application/x-www-form-urlencoded';
 
-    cuerpo = new URLSearchParams(
+    body = new URLSearchParams(
       formulario
     ).toString();
   }
@@ -79,14 +79,13 @@ async function solicitar(
 
     if (!token) {
       location.hash = '#/login';
-
       throw new ErrorApi(
         401,
-        'Tu sesión venció. Vuelve a iniciar sesión.'
+        'Tu sesión venció. Inicia sesión nuevamente.'
       );
     }
 
-    encabezados.Authorization = `Bearer ${token}`;
+    headers.Authorization = `Bearer ${token}`;
   }
 
   let respuesta;
@@ -96,11 +95,10 @@ async function solicitar(
       CONFIG.API_URL + ruta,
       {
         method: metodo,
-        headers: encabezados,
-        body: cuerpo
+        headers,
+        body
       }
     );
-
   } catch {
     throw new ErrorDeRed(
       'No hay conexión con el servidor.'
@@ -112,7 +110,7 @@ async function solicitar(
   try {
     datos = await respuesta.json();
   } catch {
-    // Algunas respuestas no tienen cuerpo JSON.
+    // Respuesta sin cuerpo JSON.
   }
 
   if (!respuesta.ok) {
@@ -131,9 +129,7 @@ async function solicitar(
 }
 
 
-// -----------------------------------
 // AUTENTICACIÓN
-// -----------------------------------
 
 export function registrarUsuario({
   nombre_1,
@@ -157,7 +153,6 @@ export function registrarUsuario({
   });
 }
 
-
 export function iniciarSesion(email, password) {
   return solicitar('/auth/login', {
     metodo: 'POST',
@@ -169,20 +164,16 @@ export function iniciarSesion(email, password) {
   });
 }
 
-
 export function obtenerPerfil() {
   return solicitar('/auth/me');
 }
 
 
-// -----------------------------------
-// CUENTAS FINANCIERAS
-// -----------------------------------
+// CUENTAS
 
 export function obtenerMisCuentas() {
   return solicitar('/auth/mis-cuentas');
 }
-
 
 export function crearCuentaFinanciera(datos) {
   return solicitar('/cuentas/', {
@@ -191,31 +182,21 @@ export function crearCuentaFinanciera(datos) {
   });
 }
 
-
-export function actualizarCuentaFinanciera(
-  idCuenta,
-  datos
-) {
-  return solicitar(`/cuentas/${idCuenta}`, {
+export function actualizarCuentaFinanciera(id, datos) {
+  return solicitar(`/cuentas/${id}`, {
     metodo: 'PATCH',
     json: datos
   });
 }
 
-
-export function desactivarCuentaFinanciera(idCuenta) {
-  return solicitar(
-    `/cuentas/${idCuenta}/desactivar`,
-    {
-      metodo: 'POST'
-    }
-  );
+export function desactivarCuentaFinanciera(id) {
+  return solicitar(`/cuentas/${id}/desactivar`, {
+    metodo: 'POST'
+  });
 }
 
 
-// -----------------------------------
 // MOVIMIENTOS
-// -----------------------------------
 
 export function crearMovimientoNormal(datos) {
   return solicitar('/movimientos/normales', {
@@ -224,20 +205,14 @@ export function crearMovimientoNormal(datos) {
   });
 }
 
-
-export function anularMovimiento(idMovimiento) {
-  return solicitar(
-    `/movimientos/${idMovimiento}/anular`,
-    {
-      metodo: 'POST'
-    }
-  );
+export function anularMovimiento(id) {
+  return solicitar(`/movimientos/${id}/anular`, {
+    metodo: 'POST'
+  });
 }
 
 
-// -----------------------------------
 // TRANSFERENCIAS
-// -----------------------------------
 
 export function crearTransferencia({
   uuid_operacion,
@@ -257,9 +232,7 @@ export function crearTransferencia({
     aplica_gmf
   };
 
-  if (motivo) {
-    datos.motivo = motivo;
-  }
+  if (motivo) datos.motivo = motivo;
 
   return solicitar('/transferencias/', {
     metodo: 'POST',
@@ -268,11 +241,8 @@ export function crearTransferencia({
 }
 
 
-// -----------------------------------
-// OBLIGACIONES FINANCIERAS
-// -----------------------------------
+// OBLIGACIONES
 
-// Crear deuda o préstamo.
 export function crearObligacion(datos) {
   return solicitar('/obligaciones/', {
     metodo: 'POST',
@@ -280,40 +250,23 @@ export function crearObligacion(datos) {
   });
 }
 
-
-// Consultar todos los datos de una obligación.
-export function obtenerObligacion(idObligacion) {
-  return solicitar(`/obligaciones/${idObligacion}`);
+export function obtenerObligacion(id) {
+  return solicitar(`/obligaciones/${id}`);
 }
 
-
-// Editar nombre, vencimiento y descripción.
-export function actualizarObligacion(
-  idObligacion,
-  datos
-) {
-  return solicitar(
-    `/obligaciones/${idObligacion}`,
-    {
-      metodo: 'PATCH',
-      json: datos
-    }
-  );
+export function actualizarObligacion(id, datos) {
+  return solicitar(`/obligaciones/${id}`, {
+    metodo: 'PATCH',
+    json: datos
+  });
 }
 
-
-// Desactivar sin eliminar el registro.
-export function desactivarObligacion(idObligacion) {
-  return solicitar(
-    `/obligaciones/${idObligacion}/desactivar`,
-    {
-      metodo: 'POST'
-    }
-  );
+export function desactivarObligacion(id) {
+  return solicitar(`/obligaciones/${id}/desactivar`, {
+    metodo: 'POST'
+  });
 }
 
-
-// Abonar a una deuda o cobrar un préstamo.
 export function registrarAbono({
   uuid_local,
   id_cuenta,
@@ -336,9 +289,7 @@ export function registrarAbono({
 }
 
 
-// -----------------------------------
-// CONSULTAS FINANCIERAS
-// -----------------------------------
+// CONSULTAS
 
 export function obtenerResumenMensual(anio, mes) {
   return solicitar(
@@ -346,27 +297,22 @@ export function obtenerResumenMensual(anio, mes) {
   );
 }
 
-
 export function obtenerHistorialMensual(anio, mes) {
   return solicitar(
     `/consultas/historial-mensual?anio=${anio}&mes=${mes}`
   );
 }
 
-
 export function obtenerPlanificacion() {
   return solicitar('/consultas/planificacion');
 }
 
 
-// -----------------------------------
 // CATEGORÍAS
-// -----------------------------------
 
 export function obtenerCategorias() {
   return solicitar('/categorias/');
 }
-
 
 export function crearCategoriaFinanciera(datos) {
   return solicitar('/categorias/', {
@@ -375,23 +321,74 @@ export function crearCategoriaFinanciera(datos) {
   });
 }
 
+export function actualizarCategoriaFinanciera(id, datos) {
+  return solicitar(`/categorias/${id}`, {
+    metodo: 'PATCH',
+    json: datos
+  });
+}
 
-export function actualizarCategoriaFinanciera(
-  idCategoria,
-  datos
-) {
-  return solicitar(`/categorias/${idCategoria}`, {
+export function desactivarCategoriaFinanciera(id) {
+  return solicitar(`/categorias/${id}/desactivar`, {
+    metodo: 'POST'
+  });
+}
+
+
+// PRESUPUESTOS
+
+export function obtenerPresupuestos() {
+  return solicitar('/presupuestos/');
+}
+
+export function crearPresupuesto(datos) {
+  return solicitar('/presupuestos/', {
+    metodo: 'POST',
+    json: datos
+  });
+}
+
+export function actualizarPresupuesto(id, datos) {
+  return solicitar(`/presupuestos/${id}`, {
     metodo: 'PATCH',
     json: datos
   });
 }
 
 
-export function desactivarCategoriaFinanciera(idCategoria) {
-  return solicitar(
-    `/categorias/${idCategoria}/desactivar`,
-    {
-      metodo: 'POST'
-    }
-  );
+// METAS DE AHORRO — PASO 25
+
+export function obtenerMetas() {
+  return solicitar('/metas/');
+}
+
+export function obtenerMeta(id) {
+  return solicitar(`/metas/${id}`);
+}
+
+export function crearMeta(datos) {
+  return solicitar('/metas/', {
+    metodo: 'POST',
+    json: datos
+  });
+}
+
+export function actualizarMeta(id, datos) {
+  return solicitar(`/metas/${id}`, {
+    metodo: 'PATCH',
+    json: datos
+  });
+}
+
+export function aportarMeta(id, datos) {
+  return solicitar(`/metas/${id}/aportes`, {
+    metodo: 'POST',
+    json: datos
+  });
+}
+
+export function desactivarMeta(id) {
+  return solicitar(`/metas/${id}/desactivar`, {
+    metodo: 'POST'
+  });
 }

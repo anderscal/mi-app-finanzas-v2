@@ -8,7 +8,8 @@
 // permanecen en IndexedDB.
 
 
-const VERSION = 'fp-v17';
+
+const VERSION = 'fp-v21';
 
 const ARCHIVOS = [
   './',
@@ -42,6 +43,7 @@ const ARCHIVOS = [
   'js/vistas/asistente.js'
 ];
 
+
 self.addEventListener('install', evento => {
   evento.waitUntil(
     caches.open(VERSION)
@@ -49,6 +51,7 @@ self.addEventListener('install', evento => {
       .then(() => self.skipWaiting())
   );
 });
+
 
 self.addEventListener('activate', evento => {
   evento.waitUntil(
@@ -64,6 +67,7 @@ self.addEventListener('activate', evento => {
       .then(() => self.clients.claim())
   );
 });
+
 
 self.addEventListener('fetch', evento => {
   const url = new URL(evento.request.url);
@@ -95,7 +99,9 @@ self.addEventListener('fetch', evento => {
           evento.request
         );
 
-        if (guardada) return guardada;
+        if (guardada) {
+          return guardada;
+        }
 
         if (evento.request.mode === 'navigate') {
           return caches.match('index.html');

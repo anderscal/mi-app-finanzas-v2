@@ -1,6 +1,7 @@
 
 import {
   obtenerPlanificacion,
+  obtenerMisCuentas,
   crearObligacion,
   obtenerObligacion,
   actualizarObligacion,
@@ -18,6 +19,7 @@ import {
   cop,
   esc,
   hoyISO,
+  nuevoUUID,
   aviso,
   guardarCache,
   leerCache
@@ -30,14 +32,9 @@ import {
 
 
 export async function render(c) {
-
   let ocupada = false;
   let obligaciones = [];
   let obligacionEditando = null;
-
-  // -------------------------------------
-  // ESTILOS EXCLUSIVOS DEL MODAL
-  // -------------------------------------
 
   c.innerHTML = `
     <style>
@@ -65,10 +62,6 @@ export async function render(c) {
         cursor: pointer;
       }
 
-      .obl-boton-nuevo:hover {
-        background: #066448;
-      }
-
       .obl-boton-nuevo:disabled {
         opacity: .5;
         cursor: not-allowed;
@@ -86,20 +79,16 @@ export async function render(c) {
         display: none;
       }
 
-      .obl-mensaje {
-        margin-top: 10px;
-      }
-
       .obl-modal {
         box-sizing: border-box;
         width: min(94vw, 510px);
         max-width: 510px;
-        max-height: min(88dvh, 780px);
+        max-height: 88dvh;
         margin: auto;
         padding: 0;
         border: 0;
         border-radius: 22px;
-        background: #ffffff;
+        background: #fff;
         color: #17251f;
         box-shadow: 0 18px 60px rgba(0, 0, 0, .2);
         overflow: hidden;
@@ -118,7 +107,7 @@ export async function render(c) {
         display: flex;
         flex-direction: column;
         min-height: 0;
-        max-height: min(88dvh, 780px);
+        max-height: 88dvh;
         margin: 0;
       }
 
@@ -135,7 +124,6 @@ export async function render(c) {
       .obl-modal-cabecera h2 {
         margin: 0;
         font-size: 21px;
-        line-height: 1.3;
       }
 
       .obl-modal-cerrar {
@@ -153,9 +141,9 @@ export async function render(c) {
       }
 
       .obl-modal-cuerpo {
-        min-height: 0;
         overflow-y: auto;
         overscroll-behavior: contain;
+        min-height: 0;
         padding: 22px;
       }
 
@@ -170,10 +158,10 @@ export async function render(c) {
         display: block;
         width: 100%;
         max-width: 100%;
+        padding: 13px 15px;
         background: #f1f3f2;
         border: 1px solid transparent;
         border-radius: 15px;
-        padding: 13px 15px;
         color: #17251f;
         font: inherit;
       }
@@ -187,7 +175,6 @@ export async function render(c) {
       .obl-modal-cuerpo .campo select:focus,
       .obl-modal-cuerpo .campo textarea:focus {
         outline: 2px solid #087a59;
-        outline-offset: 1px;
       }
 
       .obl-modal-nota {
@@ -203,7 +190,6 @@ export async function render(c) {
         color: #b42318;
         font-size: 13px;
         margin-top: 12px;
-        line-height: 1.4;
       }
 
       .obl-modal-error:empty {
@@ -213,15 +199,63 @@ export async function render(c) {
       .obl-modal-pie {
         display: flex;
         gap: 10px;
+        flex-shrink: 0;
         padding: 15px 22px;
         border-top: 1px solid #e7ece9;
-        background: #fff;
-        flex-shrink: 0;
       }
 
       .obl-modal-pie button {
         flex: 1;
         min-width: 0;
+      }
+
+      .obl-modal-pie button:disabled {
+        opacity: .45;
+        cursor: not-allowed;
+      }
+
+      .obl-grupo-inicial {
+        margin: 16px 0;
+        padding: 15px;
+        border-radius: 15px;
+        background: #f1f7f4;
+      }
+
+      .obl-grupo-inicial[hidden] {
+        display: none;
+      }
+
+      .obl-grupo-inicial .campo {
+        margin-bottom: 12px;
+      }
+
+      .obl-checkbox {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-size: 14px;
+      }
+
+      .obl-checkbox[hidden] {
+        display: none;
+      }
+
+      .obl-checkbox input {
+        width: auto !important;
+        margin: 0;
+      }
+
+      .obl-obligatorio {
+        display: inline-block;
+        margin-bottom: 7px;
+        color: #07533e;
+        font-weight: 700;
+      }
+
+      .obl-obligatorio-nota {
+        margin-top: 7px;
+        font-size: 12px;
+        color: #52645a;
       }
 
       @media (max-width: 430px) {
@@ -230,10 +264,7 @@ export async function render(c) {
           border-radius: 18px;
         }
 
-        .obl-modal-cabecera {
-          padding: 16px;
-        }
-
+        .obl-modal-cabecera,
         .obl-modal-cuerpo {
           padding: 16px;
         }
@@ -269,8 +300,7 @@ export async function render(c) {
           id="obl-nueva"
           class="obl-boton-nuevo"
         >
-          <span aria-hidden="true">+</span>
-          Nueva obligación
+          + Nueva obligación
         </button>
       </div>
 
@@ -295,41 +325,38 @@ export async function render(c) {
     ></dialog>
   `;
 
-
   const cuerpo = c.querySelector('#cuerpo');
   const totales = c.querySelector('#totales');
   const mensaje = c.querySelector('#obl-mensaje');
   const modal = c.querySelector('#obl-modal');
   const botonNuevo = c.querySelector('#obl-nueva');
 
-
-  // -------------------------------------
-  // FUNCIONES AUXILIARES
-  // -------------------------------------
-
   const limpiar = valor =>
     String(valor ?? '').trim().replace(/\s+/g, ' ');
 
+
   function montoValido(valor) {
     return (
-      /^(?:0|[1-9]\d{0,12})(?:\.\d{1,2})?$/.test(valor)
-      && Number(valor) > 0
+      /^(?:0|[1-9]\d{0,12})(?:\.\d{1,2})?$/.test(valor) &&
+      Number(valor) > 0
     );
   }
+
 
   function mostrarError(error, destino = mensaje) {
     destino.textContent =
       error instanceof ErrorDeRed
         ? (
-            'No se recibió confirmación del servidor. ' +
-            'Comprueba el resultado antes de repetir ' +
-            'la operación.'
+            'No se recibió confirmación. ' +
+            'Comprueba si la obligación fue creada ' +
+            'antes de volver a intentarlo.'
           )
         : (
             error?.message ||
             'No se pudo completar la operación.'
           );
   }
+
 
   function cerrarModal() {
     if (modal.open) {
@@ -341,7 +368,7 @@ export async function render(c) {
 
 
   // -------------------------------------
-  // CONSULTAR Y MOSTRAR OBLIGACIONES
+  // CARGAR OBLIGACIONES
   // -------------------------------------
 
   async function cargarObligaciones() {
@@ -382,40 +409,47 @@ export async function render(c) {
       o => o.estado === 'ACTIVA'
     );
 
-    function sumarPendientes(tipo) {
+
+    function sumar(tipo) {
       return activas
         .filter(o => o.tipo_obligacion === tipo)
         .reduce(
-          (suma, o) =>
-            suma + Number(o.monto_pendiente || 0),
+          (total, o) =>
+            total + Number(o.monto_pendiente || 0),
           0
         );
     }
 
-    function contarActivas(tipo) {
+
+    function contar(tipo) {
       return activas.filter(
         o => o.tipo_obligacion === tipo
       ).length;
     }
 
+
     totales.innerHTML = `
       <div class="total">
         <span>Debes</span>
+
         <strong class="monto">
-          ${cop(sumarPendientes('POR_PAGAR'))}
+          ${cop(sumar('POR_PAGAR'))}
         </strong>
+
         <small>
-          ${contarActivas('POR_PAGAR')} activa(s)
+          ${contar('POR_PAGAR')} activa(s)
         </small>
       </div>
 
       <div class="total">
         <span>Te deben</span>
+
         <strong class="monto">
-          ${cop(sumarPendientes('POR_COBRAR'))}
+          ${cop(sumar('POR_COBRAR'))}
         </strong>
+
         <small>
-          ${contarActivas('POR_COBRAR')} activa(s)
+          ${contar('POR_COBRAR')} activa(s)
         </small>
       </div>
     `;
@@ -431,7 +465,7 @@ export async function render(c) {
             0,
             Math.min(
               100,
-              Math.round((abonado / original) * 100)
+              Math.round(abonado / original * 100)
             )
           )
         : 0;
@@ -447,7 +481,6 @@ export async function render(c) {
             activa ? '' : ' cerrada'
           }"
         >
-
           <div class="obl-cabeza">
             <strong>
               ${esc(o.nombre_obligacion)}
@@ -473,14 +506,13 @@ export async function render(c) {
             role="img"
             aria-label="${porcentaje}% completado"
           >
-            <span
-              style="width: ${porcentaje}%"
-            ></span>
+            <span style="width:${porcentaje}%"></span>
           </div>
 
           <div class="resumen-pie">
             <span>
               ${porPagar ? 'Pagado' : 'Cobrado'}
+
               <span class="monto">
                 ${cop(abonado)}
               </span>
@@ -488,6 +520,7 @@ export async function render(c) {
 
             <span>
               de
+
               <span class="monto">
                 ${cop(original)}
               </span>
@@ -527,7 +560,6 @@ export async function render(c) {
                   >
                     Desactivar
                   </button>
-
                 </div>
               `
               : `
@@ -567,8 +599,8 @@ export async function render(c) {
             <section class="seccion">
               <p class="nota">
                 Sin conexión: mostrando los últimos
-                datos guardados. Las acciones de
-                administración requieren Internet.
+                datos guardados. Administrar
+                obligaciones requiere Internet.
               </p>
             </section>
           `
@@ -585,7 +617,7 @@ export async function render(c) {
             <section class="seccion">
               <p class="vacio">
                 Aún no tienes obligaciones registradas.
-                Utiliza «Nueva obligación» para comenzar.
+                Utiliza Nueva obligación para comenzar.
               </p>
             </section>
           `
@@ -595,7 +627,7 @@ export async function render(c) {
 
 
   // -------------------------------------
-  // ABRIR FORMULARIO EN VENTANA MODAL
+  // MOSTRAR FORMULARIO MODAL
   // -------------------------------------
 
   function abrirFormulario(modo, datos = null) {
@@ -613,12 +645,17 @@ export async function render(c) {
       ? (datos.descripcion || '')
       : '';
 
+    const uuidInicial = editando
+      ? ''
+      : nuevoUUID();
+
     modal.innerHTML = `
       <form
         id="obl-form-modal"
         class="obl-modal-form"
         data-modo="${modo}"
         data-id="${editando ? Number(datos.id_obligacion) : ''}"
+        data-uuid-inicial="${uuidInicial}"
         novalidate
       >
 
@@ -683,8 +720,8 @@ export async function render(c) {
 
                   <br><br>
 
-                  Estos datos no pueden modificarse
-                  para proteger el historial financiero.
+                  El capital y la fecha inicial
+                  no pueden modificarse.
                 </p>
               `
               : `
@@ -708,6 +745,85 @@ export async function render(c) {
                   </select>
                 </div>
 
+
+                <!-- DECISIÓN OBLIGATORIA -->
+                <div class="campo">
+                  <label
+                    for="obl-hubo-dinero"
+                    class="obl-obligatorio"
+                  >
+                    ¿Hubo movimiento inicial de dinero? *
+                  </label>
+
+                  <select
+                    id="obl-hubo-dinero"
+                    name="registrar_movimiento_inicial"
+                    required
+                  >
+                    <option value="" selected disabled>
+                      Selecciona una opción…
+                    </option>
+
+                    <option value="si">
+                      Sí, registrar dinero en una cuenta
+                    </option>
+
+                    <option value="no">
+                      No, solo registrar la obligación
+                    </option>
+                  </select>
+
+                  <p class="obl-obligatorio-nota">
+                    Debes seleccionar una opción
+                    antes de crear la obligación.
+                  </p>
+                </div>
+
+
+                <div
+                  id="obl-dinero-inicial"
+                  class="obl-grupo-inicial"
+                  hidden
+                >
+                  <div class="campo">
+                    <label for="obl-cuenta-inicial">
+                      <span id="obl-texto-cuenta">
+                        Cuenta financiera
+                      </span>
+                    </label>
+
+                    <select
+                      id="obl-cuenta-inicial"
+                      name="id_cuenta_inicial"
+                    >
+                      <option value="">
+                        Selecciona una cuenta
+                      </option>
+                    </select>
+                  </div>
+
+                  <label
+                    class="obl-checkbox"
+                    id="obl-gmf-fila"
+                    hidden
+                  >
+                    <input
+                      id="obl-gmf-inicial"
+                      name="aplica_gmf_inicial"
+                      type="checkbox"
+                    >
+
+                    Aplicar GMF (4 × 1000)
+                    a la salida de dinero
+                  </label>
+
+                  <p
+                    id="obl-ayuda-inicial"
+                    class="nota"
+                  ></p>
+                </div>
+
+
                 <div class="campo">
                   <label for="obl-monto">
                     Monto original (COP)
@@ -721,6 +837,7 @@ export async function render(c) {
                     required
                   >
                 </div>
+
 
                 <div class="campo">
                   <label for="obl-inicio">
@@ -774,9 +891,9 @@ export async function render(c) {
               ? ''
               : `
                 <p class="obl-modal-nota">
-                  Crear una obligación permite controlar
-                  el dinero que debes o que te deben.
-                  No mueve dinero de tus cuentas.
+                  Si esta obligación es antigua y el dinero
+                  ya está reflejado en tus saldos iniciales,
+                  selecciona «No» para evitar duplicarlo.
                 </p>
               `
           }
@@ -791,7 +908,6 @@ export async function render(c) {
 
 
         <div class="obl-modal-pie">
-
           <button
             type="button"
             class="btn"
@@ -803,6 +919,7 @@ export async function render(c) {
           <button
             type="submit"
             class="btn btn-primario"
+            ${editando ? '' : 'disabled'}
           >
             ${
               editando
@@ -810,7 +927,6 @@ export async function render(c) {
                 : 'Crear obligación'
             }
           </button>
-
         </div>
       </form>
     `;
@@ -828,7 +944,159 @@ export async function render(c) {
 
 
   // -------------------------------------
-  // BOTÓN NUEVA OBLIGACIÓN
+  // CARGAR CUENTAS PARA DINERO INICIAL
+  // -------------------------------------
+
+  async function cargarCuentasIniciales(form) {
+    const selector = form.querySelector(
+      '#obl-cuenta-inicial'
+    );
+
+    if (!selector) return;
+
+    selector.innerHTML = `
+      <option value="">
+        Cargando cuentas…
+      </option>
+    `;
+
+    try {
+      const respuesta = await obtenerMisCuentas();
+
+      if (!Array.isArray(respuesta?.cuentas)) {
+        throw new Error(
+          'No se pudieron consultar las cuentas.'
+        );
+      }
+
+      const activas = respuesta.cuentas.filter(
+        cuenta => cuenta.estado === 'ACTIVA'
+      );
+
+      if (activas.length === 0) {
+        selector.innerHTML = `
+          <option value="">
+            No tienes cuentas activas
+          </option>
+        `;
+        return;
+      }
+
+      selector.innerHTML = `
+        <option value="">
+          Selecciona una cuenta
+        </option>
+
+        ${activas.map(cuenta => `
+          <option value="${Number(cuenta.id_cuenta)}">
+            ${esc(cuenta.nombre_cuenta)}
+            · ${cop(cuenta.saldo_actual)}
+          </option>
+        `).join('')}
+      `;
+
+    } catch (error) {
+      selector.innerHTML = `
+        <option value="">
+          No fue posible cargar las cuentas
+        </option>
+      `;
+
+      const destino = form.querySelector(
+        '#obl-modal-error'
+      );
+
+      if (destino) {
+        mostrarError(error, destino);
+      }
+    }
+  }
+
+
+  // -------------------------------------
+  // VALIDAR LA SELECCIÓN OBLIGATORIA
+  // -------------------------------------
+
+  async function actualizarDineroInicial(form) {
+    const selectorDecision = form.querySelector(
+      '#obl-hubo-dinero'
+    );
+
+    if (!selectorDecision) return;
+
+    const decision = selectorDecision.value;
+
+    const decisionValida =
+      decision === 'si' || decision === 'no';
+
+    const botonGuardar = form.querySelector(
+      'button[type="submit"]'
+    );
+
+    // Nunca permitir la creación sin decidir.
+    botonGuardar.disabled = !decisionValida;
+
+    const bloque = form.querySelector(
+      '#obl-dinero-inicial'
+    );
+
+    const huboDinero = decision === 'si';
+
+    bloque.hidden = !huboDinero;
+
+    if (!huboDinero) {
+      const selectorCuenta = form.querySelector(
+        '#obl-cuenta-inicial'
+      );
+
+      if (selectorCuenta) {
+        selectorCuenta.value = '';
+      }
+
+      form.elements.aplica_gmf_inicial.checked = false;
+      return;
+    }
+
+    const tipo = form.elements.tipo_obligacion.value;
+    const prestaste = tipo === 'POR_COBRAR';
+
+    form.querySelector('#obl-texto-cuenta')
+      .textContent = prestaste
+        ? '¿Desde qué cuenta entregaste el dinero?'
+        : '¿En qué cuenta recibiste el dinero?';
+
+    form.querySelector('#obl-ayuda-inicial')
+      .textContent = prestaste
+        ? (
+            'El monto original saldrá de la cuenta ' +
+            'seleccionada y quedará por cobrar.'
+          )
+        : (
+            'El monto original entrará a la cuenta ' +
+            'seleccionada y quedará por pagar.'
+          );
+
+    const filaGMF = form.querySelector(
+      '#obl-gmf-fila'
+    );
+
+    filaGMF.hidden = !prestaste;
+
+    if (!prestaste) {
+      form.elements.aplica_gmf_inicial.checked = false;
+    }
+
+    // Descargar cuentas una sola vez al abrir
+    // el bloque del movimiento inicial.
+    if (form.dataset.cuentasCargadas !== 'si') {
+      form.dataset.cuentasCargadas = 'si';
+      await cargarCuentasIniciales(form);
+    }
+  }
+
+
+  // -------------------------------------
+  // ABRIR NUEVA OBLIGACIÓN
   // -------------------------------------
 
   botonNuevo.addEventListener('click', () => {
@@ -838,6 +1106,31 @@ export async function render(c) {
     obligacionEditando = null;
 
     abrirFormulario('crear');
+  });
+
+
+  // -------------------------------------
+  // CAMBIAR TIPO O MOVIMIENTO INICIAL
+  // -------------------------------------
+
+  modal.addEventListener('change', async ev => {
+    const form = modal.querySelector(
+      '#obl-form-modal'
+    );
+
+    if (
+      !form ||
+      form.dataset.modo !== 'crear'
+    ) {
+      return;
+    }
+
+    if (
+      ev.target.id === 'obl-hubo-dinero' ||
+      ev.target.id === 'obl-tipo'
+    ) {
+      await actualizarDineroInicial(form);
+    }
   });
 
 
@@ -856,11 +1149,13 @@ export async function render(c) {
     }
   });
 
+
   modal.addEventListener('cancel', ev => {
     if (ocupada) {
       ev.preventDefault();
     }
   });
+
 
   modal.addEventListener('close', () => {
     if (!ocupada) {
@@ -874,7 +1169,9 @@ export async function render(c) {
   // -------------------------------------
 
   modal.addEventListener('submit', async ev => {
-    const form = ev.target.closest('#obl-form-modal');
+    const form = ev.target.closest(
+      '#obl-form-modal'
+    );
 
     if (!form) return;
 
@@ -888,8 +1185,8 @@ export async function render(c) {
 
     error.textContent = '';
 
-    const modo = form.dataset.modo;
-    const editando = modo === 'editar';
+    const editando =
+      form.dataset.modo === 'editar';
 
     const nombre = limpiar(
       form.elements.nombre_obligacion.value
@@ -903,7 +1200,7 @@ export async function render(c) {
 
     if (!nombre || nombre.length > 80) {
       error.textContent =
-        'Escribe un nombre de máximo 80 caracteres.';
+        'Escribe un nombre válido.';
       return;
     }
 
@@ -935,6 +1232,19 @@ export async function render(c) {
       const tipo =
         form.elements.tipo_obligacion.value;
 
+      const decision =
+        form.elements.registrar_movimiento_inicial.value;
+
+      // Validación final aunque alguien active
+      // manualmente el botón desde DevTools.
+      if (!['si', 'no'].includes(decision)) {
+        error.textContent =
+          'Debes indicar si hubo movimiento inicial de dinero.';
+        return;
+      }
+
+      const huboDinero = decision === 'si';
+
       const monto = form.elements.monto_original.value
         .trim()
         .replace(',', '.');
@@ -952,9 +1262,9 @@ export async function render(c) {
 
       if (!montoValido(monto)) {
         error.textContent =
-          'El monto debe ser mayor que cero, ' +
-          'sin separadores de miles y con máximo ' +
-          'dos decimales.';
+          'El monto debe ser mayor a cero, ' +
+          'sin separadores de miles y con ' +
+          'máximo dos decimales.';
         return;
       }
 
@@ -970,13 +1280,34 @@ export async function render(c) {
         return;
       }
 
+      const idCuenta = Number(
+        form.elements.id_cuenta_inicial?.value
+      );
+
+      if (
+        huboDinero &&
+        (!Number.isSafeInteger(idCuenta) || idCuenta <= 0)
+      ) {
+        error.textContent =
+          'Selecciona la cuenta donde se movió el dinero.';
+        return;
+      }
+
       datos = {
         nombre_obligacion: nombre,
         tipo_obligacion: tipo,
         monto_original: monto,
         fecha_inicio: inicio,
         fecha_vencimiento: vencimiento || null,
-        descripcion: descripcion || null
+        descripcion: descripcion || null,
+        registrar_movimiento_inicial: huboDinero,
+        id_cuenta_inicial: huboDinero ? idCuenta : null,
+        uuid_local_inicial:
+          huboDinero ? form.dataset.uuidInicial : null,
+        aplica_gmf_inicial:
+          huboDinero && tipo === 'POR_COBRAR'
+            ? form.elements.aplica_gmf_inicial.checked
+            : false
       };
     }
 
@@ -1012,18 +1343,16 @@ export async function render(c) {
       aviso(
         editando
           ? 'Obligación actualizada correctamente.'
-          : 'Obligación creada correctamente.',
+          : 'Obligación creada. Revisa el saldo de tu cuenta.',
         'ok'
       );
 
       await cargarObligaciones();
 
-    } catch (e) {
-      mostrarError(e, error);
+    } catch (errorSolicitud) {
+      mostrarError(errorSolicitud, error);
 
-      if (e instanceof ErrorDeRed) {
-        // No reintentar automáticamente una creación
-        // si la respuesta del servidor es incierta.
+      if (errorSolicitud instanceof ErrorDeRed) {
         confirmacionIncierta = true;
       }
 
@@ -1067,11 +1396,10 @@ export async function render(c) {
       }
 
       obligacionEditando = detalle;
-
       abrirFormulario('editar', detalle);
 
-    } catch (e) {
-      mostrarError(e);
+    } catch (error) {
+      mostrarError(error);
 
     } finally {
       ocupada = false;
@@ -1080,7 +1408,7 @@ export async function render(c) {
 
 
   // -------------------------------------
-  // COMPROBAR ABONOS OFFLINE
+  // REVISAR ABONOS LOCALES
   // -------------------------------------
 
   async function tieneAbonosLocales(idObligacion) {
@@ -1118,7 +1446,7 @@ export async function render(c) {
 
 
   // -------------------------------------
-  // EDITAR O DESACTIVAR DESDE LAS TARJETAS
+  // EDITAR O DESACTIVAR
   // -------------------------------------
 
   cuerpo.addEventListener('click', async ev => {
@@ -1160,21 +1488,22 @@ export async function render(c) {
     try {
       if (await tieneAbonosLocales(id)) {
         mensaje.textContent =
-          'Esta obligación tiene abonos pendientes ' +
-          'o rechazados. Revísalos en Movimientos.';
+          'Hay abonos pendientes o rechazados. ' +
+          'Revísalos en Movimientos.';
         return;
       }
-    } catch (e) {
+
+    } catch {
       mensaje.textContent =
-        'No se pudo verificar la cola local. ' +
-        'Por seguridad no se desactivó.';
+        'No se pudo verificar la cola offline. ' +
+        'No se desactivó la obligación.';
       return;
     }
 
     const confirmado = window.confirm(
       `¿Desactivar "${obligacion.nombre_obligacion}"?\n\n` +
-      'Solo es posible si no tiene abonos activos. ' +
-      'El historial se conservará.'
+      'No se permite si existen movimientos ' +
+      'financieros activos relacionados.'
     );
 
     if (!confirmado) return;
@@ -1185,7 +1514,7 @@ export async function render(c) {
     try {
       if (await tieneAbonosLocales(id)) {
         throw new Error(
-          'Hay abonos locales pendientes por resolver.'
+          'Hay abonos locales por resolver.'
         );
       }
 
@@ -1198,8 +1527,8 @@ export async function render(c) {
 
       await cargarObligaciones();
 
-    } catch (e) {
-      mostrarError(e);
+    } catch (error) {
+      mostrarError(error);
 
     } finally {
       ocupada = false;
@@ -1210,10 +1539,6 @@ export async function render(c) {
     }
   });
 
-
-  // -------------------------------------
-  // CARGA INICIAL
-  // -------------------------------------
 
   await cargarObligaciones();
 }

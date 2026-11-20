@@ -2,6 +2,7 @@
 from datetime import date
 from decimal import Decimal
 from typing import Literal
+from uuid import UUID
 
 from pydantic import (
     BaseModel,
@@ -43,10 +44,31 @@ class ObligacionCrear(BaseModel):
         max_length=255
     )
 
+    # Movimiento de dinero al crear la obligación.
+    registrar_movimiento_inicial: bool = False
+
+    # Obligatorios únicamente si hubo dinero.
+    id_cuenta_inicial: int | None = Field(
+        default=None,
+        gt=0
+    )
+
+    uuid_local_inicial: UUID | None = None
+
+    # Opcional para salidas de dinero.
+    aplica_gmf_inicial: bool = False
+
     @field_validator("nombre_obligacion")
     @classmethod
     def normalizar_nombre(cls, valor: str) -> str:
-        return " ".join(valor.split())
+        nombre = " ".join(valor.split())
+
+        if not nombre:
+            raise ValueError(
+                "El nombre no puede estar vacío"
+            )
+
+        return nombre
 
     @field_validator("descripcion")
     @classmethod
@@ -57,7 +79,7 @@ class ObligacionCrear(BaseModel):
         return valor.strip() or None if valor is not None else None
 
     @model_validator(mode="after")
-    def validar_fechas(self):
+    def validar_reglas(self):
         if self.fecha_inicio > date.today():
             raise ValueError(
                 "La fecha de inicio no puede ser futura"
@@ -70,6 +92,36 @@ class ObligacionCrear(BaseModel):
             raise ValueError(
                 "El vencimiento no puede ser anterior al inicio"
             )
+
+        if self.registrar_movimiento_inicial:
+            if (
+                self.id_cuenta_inicial is None
+                or self.uuid_local_inicial is None
+            ):
+                raise ValueError(
+                    "Debes indicar cuenta y UUID "
+                    "para registrar dinero inicial"
+                )
+
+            if (
+                self.tipo_obligacion == "POR_PAGAR"
+                and self.aplica_gmf_inicial
+            ):
+                raise ValueError(
+                    "El GMF inicial solo aplica a "
+                    "la salida de dinero prestado"
+                )
+
+        else:
+            if (
+                self.id_cuenta_inicial is not None
+                or self.uuid_local_inicial is not None
+                or self.aplica_gmf_inicial
+            ):
+                raise ValueError(
+                    "No puedes indicar datos de movimiento "
+                    "si no hubo dinero inicial"
+                )
 
         return self
 
@@ -129,7 +181,6 @@ class ObligacionRespuesta(BaseModel):
 
     id_obligacion: int
     id_usuario: int
-
     nombre_obligacion: str
 
     tipo_obligacion: Literal[
