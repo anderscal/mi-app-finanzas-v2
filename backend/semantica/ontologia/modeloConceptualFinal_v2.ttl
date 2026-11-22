@@ -1,0 +1,608 @@
+@prefix : <http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xml: <http://www.w3.org/XML/1998/namespace> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@base <http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/> .
+
+<http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20> rdf:type owl:Ontology .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/aplicaACategoria
+:aplicaACategoria rdf:type owl:ObjectProperty ;
+                  rdfs:subPropertyOf owl:topObjectProperty ;
+                  rdfs:domain :Presupuesto ;
+                  rdfs:range :CategoriaGasto .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/correspondeAMeta
+:correspondeAMeta rdf:type owl:ObjectProperty ;
+                  rdfs:subPropertyOf owl:topObjectProperty ;
+                  rdfs:domain :AporteMeta ;
+                  rdfs:range :MetaFinanciera .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/perteneceACategoria
+:perteneceACategoria rdf:type owl:ObjectProperty ;
+                     rdfs:subPropertyOf owl:topObjectProperty ;
+                     rdfs:domain :MovimientoFinanciero ;
+                     rdfs:range :CategoriaFinanciera .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/perteneceACuenta
+:perteneceACuenta rdf:type owl:ObjectProperty ;
+                  rdfs:subPropertyOf owl:topObjectProperty ;
+                  rdfs:domain :MovimientoFinanciero ;
+                  rdfs:range :CuentaFinanciera .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/registradoPorUsuario
+:registradoPorUsuario rdf:type owl:ObjectProperty ;
+                      rdfs:subPropertyOf owl:topObjectProperty ;
+                      rdfs:domain :AporteMeta ;
+                      rdfs:range :Usuario .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/relacionadoConObligacion
+:relacionadoConObligacion rdf:type owl:ObjectProperty ;
+                          rdfs:subPropertyOf owl:topObjectProperty ;
+                          rdfs:domain :MovimientoFinanciero ;
+                          rdfs:range :ObligacionFinanciera .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/seRealizaDesdeCuenta
+:seRealizaDesdeCuenta rdf:type owl:ObjectProperty ;
+                      rdfs:subPropertyOf owl:topObjectProperty ;
+                      rdfs:domain :AporteMeta ;
+                      rdfs:range :CuentaFinanciera .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneComportamiento
+:tieneComportamiento rdf:type owl:ObjectProperty ;
+                     rdfs:subPropertyOf owl:topObjectProperty ;
+                     rdfs:domain :CategoriaGasto ;
+                     rdfs:range :ComportamientoGasto .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneCuenta
+:tieneCuenta rdf:type owl:ObjectProperty ;
+             rdfs:subPropertyOf owl:topObjectProperty ;
+             rdfs:domain :Usuario ;
+             rdfs:range :CuentaFinanciera .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneCuentaDestino
+:tieneCuentaDestino rdf:type owl:ObjectProperty ;
+                    rdfs:subPropertyOf owl:topObjectProperty ;
+                    rdfs:domain :Transferencia ;
+                    rdfs:range :CuentaFinanciera .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneCuentaOrigen
+:tieneCuentaOrigen rdf:type owl:ObjectProperty ;
+                   rdfs:subPropertyOf owl:topObjectProperty ;
+                   rdfs:domain :Transferencia ;
+                   rdfs:range :CuentaFinanciera .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneMeta
+:tieneMeta rdf:type owl:ObjectProperty ;
+           rdfs:subPropertyOf owl:topObjectProperty ;
+           rdfs:domain :Usuario ;
+           rdfs:range :MetaFinanciera .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneNaturaleza
+:tieneNaturaleza rdf:type owl:ObjectProperty ;
+                 rdfs:subPropertyOf owl:topObjectProperty ;
+                 rdfs:domain :CategoriaGasto ;
+                 rdfs:range :NaturalezaGasto .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneObligacion
+:tieneObligacion rdf:type owl:ObjectProperty ;
+                 rdfs:subPropertyOf owl:topObjectProperty ;
+                 rdfs:domain :Usuario ;
+                 rdfs:range :ObligacionFinanciera .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tienePresupuesto
+:tienePresupuesto rdf:type owl:ObjectProperty ;
+                  rdfs:subPropertyOf owl:topObjectProperty ;
+                  rdfs:domain :Usuario ;
+                  rdfs:range :Presupuesto .
+
+
+#################################################################
+#    Data properties
+#################################################################
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneEstadoAporte
+:tieneEstadoAporte rdf:type owl:DatatypeProperty ;
+                   rdfs:subPropertyOf owl:topDataProperty ;
+                   rdfs:domain :AporteMeta ;
+                   rdfs:range xsd:string .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneFecha
+:tieneFecha rdf:type owl:DatatypeProperty ;
+            rdfs:subPropertyOf owl:topDataProperty ;
+            rdfs:domain :MovimientoFinanciero ;
+            rdfs:range xsd:dateTime .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneFechaOperacion
+:tieneFechaOperacion rdf:type owl:DatatypeProperty ;
+                     rdfs:subPropertyOf owl:topDataProperty ;
+                     rdfs:domain :AporteMeta ;
+                     rdfs:range xsd:dateTime .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneIdAporte
+:tieneIdAporte rdf:type owl:DatatypeProperty ;
+               rdfs:subPropertyOf owl:topDataProperty ;
+               rdfs:domain :AporteMeta ;
+               rdfs:range xsd:integer .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneMonto
+:tieneMonto rdf:type owl:DatatypeProperty ;
+            rdfs:subPropertyOf owl:topDataProperty ;
+            rdfs:domain :MovimientoFinanciero ;
+            rdfs:range xsd:decimal .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneMontoAcumulado
+:tieneMontoAcumulado rdf:type owl:DatatypeProperty ;
+                     rdfs:subPropertyOf owl:topDataProperty ;
+                     rdfs:domain :MetaFinanciera ;
+                     rdfs:range xsd:decimal .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneMontoAporte
+:tieneMontoAporte rdf:type owl:DatatypeProperty ;
+                  rdfs:subPropertyOf owl:topDataProperty ;
+                  rdfs:domain :AporteMeta ;
+                  rdfs:range xsd:decimal .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneMontoLimite
+:tieneMontoLimite rdf:type owl:DatatypeProperty ;
+                  rdfs:subPropertyOf owl:topDataProperty ;
+                  rdfs:domain :Presupuesto ;
+                  rdfs:range xsd:decimal .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneMontoObjetivo
+:tieneMontoObjetivo rdf:type owl:DatatypeProperty ;
+                    rdfs:subPropertyOf owl:topDataProperty ;
+                    rdfs:domain :MetaFinanciera ;
+                    rdfs:range xsd:decimal .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneMontoOriginal
+:tieneMontoOriginal rdf:type owl:DatatypeProperty ;
+                    rdfs:subPropertyOf owl:topDataProperty ;
+                    rdfs:domain :ObligacionFinanciera ;
+                    rdfs:range xsd:decimal .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneMontoReservado
+:tieneMontoReservado rdf:type owl:DatatypeProperty ;
+                     rdfs:subPropertyOf owl:topDataProperty ;
+                     rdfs:domain :CuentaFinanciera ;
+                     rdfs:range xsd:decimal .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneMontoSinVincular
+:tieneMontoSinVincular rdf:type owl:DatatypeProperty ;
+                       rdfs:subPropertyOf owl:topDataProperty ;
+                       rdfs:domain :MetaFinanciera ;
+                       rdfs:range xsd:decimal .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneMontoVinculado
+:tieneMontoVinculado rdf:type owl:DatatypeProperty ;
+                     rdfs:subPropertyOf owl:topDataProperty ;
+                     rdfs:domain :MetaFinanciera ;
+                     rdfs:range xsd:decimal .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneNombreCategoria
+:tieneNombreCategoria rdf:type owl:DatatypeProperty ;
+                      rdfs:subPropertyOf owl:topDataProperty ;
+                      rdfs:domain :CategoriaFinanciera ;
+                      rdfs:range xsd:string .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneNombreCuenta
+:tieneNombreCuenta rdf:type owl:DatatypeProperty ;
+                   rdfs:subPropertyOf owl:topDataProperty ;
+                   rdfs:domain :CuentaFinanciera ;
+                   rdfs:range xsd:string .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneNombreMeta
+:tieneNombreMeta rdf:type owl:DatatypeProperty ;
+                 rdfs:subPropertyOf owl:topDataProperty ;
+                 rdfs:domain :MetaFinanciera ;
+                 rdfs:range xsd:string .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneNombreObligacion
+:tieneNombreObligacion rdf:type owl:DatatypeProperty ;
+                       rdfs:subPropertyOf owl:topDataProperty ;
+                       rdfs:domain :ObligacionFinanciera ;
+                       rdfs:range xsd:string .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneSaldoLibre
+:tieneSaldoLibre rdf:type owl:DatatypeProperty ;
+                 rdfs:subPropertyOf owl:topDataProperty ;
+                 rdfs:domain :CuentaFinanciera ;
+                 rdfs:range xsd:decimal .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneSaldoReal
+:tieneSaldoReal rdf:type owl:DatatypeProperty ;
+                rdfs:subPropertyOf owl:topDataProperty ;
+                rdfs:domain :CuentaFinanciera ;
+                rdfs:range xsd:decimal .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/tieneUUIDOperacion
+:tieneUUIDOperacion rdf:type owl:DatatypeProperty ;
+                    rdfs:subPropertyOf owl:topDataProperty ;
+                    rdfs:domain :AporteMeta ;
+                    rdfs:range xsd:string .
+
+
+#################################################################
+#    Classes
+#################################################################
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/AporteMeta
+:AporteMeta rdf:type owl:Class ;
+            rdfs:subClassOf [ rdf:type owl:Restriction ;
+                              owl:onProperty :correspondeAMeta ;
+                              owl:qualifiedCardinality "1"^^xsd:nonNegativeInteger ;
+                              owl:onClass :MetaFinanciera
+                            ] ,
+                            [ rdf:type owl:Restriction ;
+                              owl:onProperty :registradoPorUsuario ;
+                              owl:qualifiedCardinality "1"^^xsd:nonNegativeInteger ;
+                              owl:onClass :Usuario
+                            ] ,
+                            [ rdf:type owl:Restriction ;
+                              owl:onProperty :seRealizaDesdeCuenta ;
+                              owl:qualifiedCardinality "1"^^xsd:nonNegativeInteger ;
+                              owl:onClass :CuentaFinanciera
+                            ] ;
+            owl:disjointWith :MovimientoFinanciero .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/CategoriaFinanciera
+:CategoriaFinanciera rdf:type owl:Class .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/CategoriaGasto
+:CategoriaGasto rdf:type owl:Class ;
+                rdfs:subClassOf :CategoriaFinanciera ,
+                                [ rdf:type owl:Restriction ;
+                                  owl:onProperty :tieneComportamiento ;
+                                  owl:someValuesFrom :ComportamientoGasto
+                                ] ,
+                                [ rdf:type owl:Restriction ;
+                                  owl:onProperty :tieneNaturaleza ;
+                                  owl:someValuesFrom :NaturalezaGasto
+                                ] ,
+                                [ rdf:type owl:Restriction ;
+                                  owl:onProperty :tieneComportamiento ;
+                                  owl:allValuesFrom :ComportamientoGasto
+                                ] ,
+                                [ rdf:type owl:Restriction ;
+                                  owl:onProperty :tieneNaturaleza ;
+                                  owl:allValuesFrom :NaturalezaGasto
+                                ] ;
+                owl:disjointWith :CategoriaIngreso .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/CategoriaIngreso
+:CategoriaIngreso rdf:type owl:Class ;
+                  rdfs:subClassOf :CategoriaFinanciera .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/ClasificacionGasto
+:ClasificacionGasto rdf:type owl:Class .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/ComportamientoGasto
+:ComportamientoGasto rdf:type owl:Class ;
+                     rdfs:subClassOf :ClasificacionGasto ;
+                     owl:disjointWith :NaturalezaGasto .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/CuentaFinanciera
+:CuentaFinanciera rdf:type owl:Class .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/Gasto
+:Gasto rdf:type owl:Class ;
+       rdfs:subClassOf :MovimientoFinanciero ,
+                       [ rdf:type owl:Restriction ;
+                         owl:onProperty :perteneceACategoria ;
+                         owl:someValuesFrom :CategoriaGasto
+                       ] ,
+                       [ rdf:type owl:Restriction ;
+                         owl:onProperty :perteneceACategoria ;
+                         owl:allValuesFrom :CategoriaGasto
+                       ] ,
+                       [ rdf:type owl:Restriction ;
+                         owl:onProperty :perteneceACuenta ;
+                         owl:qualifiedCardinality "1"^^xsd:nonNegativeInteger ;
+                         owl:onClass :CuentaFinanciera
+                       ] ;
+       owl:disjointWith :Ingreso ,
+                        :Transferencia .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/Ingreso
+:Ingreso rdf:type owl:Class ;
+         rdfs:subClassOf :MovimientoFinanciero ,
+                         [ rdf:type owl:Restriction ;
+                           owl:onProperty :perteneceACategoria ;
+                           owl:someValuesFrom :CategoriaIngreso
+                         ] ,
+                         [ rdf:type owl:Restriction ;
+                           owl:onProperty :perteneceACategoria ;
+                           owl:allValuesFrom :CategoriaIngreso
+                         ] ,
+                         [ rdf:type owl:Restriction ;
+                           owl:onProperty :perteneceACuenta ;
+                           owl:qualifiedCardinality "1"^^xsd:nonNegativeInteger ;
+                           owl:onClass :CuentaFinanciera
+                         ] ;
+         owl:disjointWith :Transferencia .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/LiberacionMeta
+:LiberacionMeta rdf:type owl:Class ;
+                rdfs:subClassOf :AporteMeta .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/MetaFinanciera
+:MetaFinanciera rdf:type owl:Class .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/MovimientoFinanciero
+:MovimientoFinanciero rdf:type owl:Class .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/NaturalezaGasto
+:NaturalezaGasto rdf:type owl:Class ;
+                 rdfs:subClassOf :ClasificacionGasto .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/ObligacionFinanciera
+:ObligacionFinanciera rdf:type owl:Class .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/ObligacionPorCobrar
+:ObligacionPorCobrar rdf:type owl:Class ;
+                     rdfs:subClassOf :ObligacionFinanciera ;
+                     owl:disjointWith :ObligacionPorPagar .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/ObligacionPorPagar
+:ObligacionPorPagar rdf:type owl:Class ;
+                    rdfs:subClassOf :ObligacionFinanciera .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/Presupuesto
+:Presupuesto rdf:type owl:Class ;
+             rdfs:subClassOf [ rdf:type owl:Restriction ;
+                               owl:onProperty :aplicaACategoria ;
+                               owl:qualifiedCardinality "1"^^xsd:nonNegativeInteger ;
+                               owl:onClass :CategoriaGasto
+                             ] .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/ReservaMeta
+:ReservaMeta rdf:type owl:Class ;
+             rdfs:subClassOf :AporteMeta ;
+             owl:disjointWith :LiberacionMeta .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/Transferencia
+:Transferencia rdf:type owl:Class ;
+               rdfs:subClassOf :MovimientoFinanciero ,
+                               [ rdf:type owl:Restriction ;
+                                 owl:onProperty :tieneCuentaDestino ;
+                                 owl:qualifiedCardinality "1"^^xsd:nonNegativeInteger ;
+                                 owl:onClass :CuentaFinanciera
+                               ] ,
+                               [ rdf:type owl:Restriction ;
+                                 owl:onProperty :tieneCuentaOrigen ;
+                                 owl:qualifiedCardinality "1"^^xsd:nonNegativeInteger ;
+                                 owl:onClass :CuentaFinanciera
+                               ] .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/Usuario
+:Usuario rdf:type owl:Class .
+
+
+#################################################################
+#    Individuals
+#################################################################
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/alimentacion
+:alimentacion rdf:type owl:NamedIndividual ,
+                       :CategoriaGasto ;
+              :tieneComportamiento :variable ;
+              :tieneNaturaleza :necesaria ;
+              :tieneNombreCategoria "Alimentacion" .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/arriendo
+:arriendo rdf:type owl:NamedIndividual ,
+                   :CategoriaGasto ;
+          :tieneComportamiento :fijo ;
+          :tieneNaturaleza :necesaria ;
+          :tieneNombreCategoria "Arriendo" .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/creditoMoto
+:creditoMoto rdf:type owl:NamedIndividual ,
+                      :ObligacionPorPagar ;
+             :tieneMontoOriginal 5000000 .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/cuentaBancolombia
+:cuentaBancolombia rdf:type owl:NamedIndividual ,
+                            :CuentaFinanciera ;
+                   :tieneNombreCuenta "Bancolombia" .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/cuentaNequi
+:cuentaNequi rdf:type owl:NamedIndividual ,
+                      :CuentaFinanciera ;
+             :tieneMontoReservado "400000.00"^^xsd:decimal ;
+             :tieneNombreCuenta "Nequi" ;
+             :tieneSaldoLibre "600000.00"^^xsd:decimal ;
+             :tieneSaldoReal "1000000.00"^^xsd:decimal .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/discrecional
+:discrecional rdf:type owl:NamedIndividual ,
+                       :NaturalezaGasto ;
+              owl:differentFrom :necesaria .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/fijo
+:fijo rdf:type owl:NamedIndividual ,
+               :ComportamientoGasto ;
+      owl:differentFrom :variable .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/gastoAlmuerzo001
+:gastoAlmuerzo001 rdf:type owl:NamedIndividual ,
+                           :Gasto ;
+                  :perteneceACategoria :alimentacion ;
+                  :perteneceACuenta :cuentaNequi ;
+                  :tieneMonto 50000 .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/gastoRestaurante001
+:gastoRestaurante001 rdf:type owl:NamedIndividual ,
+                              :Gasto ;
+                     :perteneceACategoria :restaurantes ;
+                     :perteneceACuenta :cuentaNequi ;
+                     :tieneFecha "2026-09-20T19:30:00"^^xsd:dateTime ;
+                     :tieneMonto 80000 .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/ingresoSalario001
+:ingresoSalario001 rdf:type owl:NamedIndividual ,
+                            :Ingreso ;
+                   :perteneceACategoria :salario ;
+                   :perteneceACuenta :cuentaNequi ;
+                   :tieneMonto 3000000 .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/liberacionViaje001
+:liberacionViaje001 rdf:type owl:NamedIndividual ,
+                             :LiberacionMeta ;
+                    :correspondeAMeta :metaViaje ;
+                    :registradoPorUsuario :usuarioDemo ;
+                    :seRealizaDesdeCuenta :cuentaNequi ;
+                    :tieneEstadoAporte "ACTIVO" ;
+                    :tieneFechaOperacion "2026-11-20T00:00:00"^^xsd:dateTime ;
+                    :tieneIdAporte 2 ;
+                    :tieneMontoAporte "100000.00"^^xsd:decimal ;
+                    :tieneUUIDOperacion "e42a83b8-41d5-4380-993e-b6f0c1d11a02"^^xsd:string .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/metaViaje
+:metaViaje rdf:type owl:NamedIndividual ,
+                    :MetaFinanciera ;
+           :tieneMontoAcumulado "400000.00"^^xsd:decimal ;
+           :tieneMontoObjetivo 4000000 ;
+           :tieneMontoSinVincular "0.00"^^xsd:decimal ;
+           :tieneMontoVinculado "400000.00"^^xsd:decimal .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/necesaria
+:necesaria rdf:type owl:NamedIndividual ,
+                    :NaturalezaGasto .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/presupuestoAlimentacion
+:presupuestoAlimentacion rdf:type owl:NamedIndividual ,
+                                  :Presupuesto ;
+                         :aplicaACategoria :alimentacion ;
+                         :tieneMontoLimite 600000 .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/reservaViaje001
+:reservaViaje001 rdf:type owl:NamedIndividual ,
+                          :ReservaMeta ;
+                 :correspondeAMeta :metaViaje ;
+                 :registradoPorUsuario :usuarioDemo ;
+                 :seRealizaDesdeCuenta :cuentaNequi ;
+                 :tieneEstadoAporte "ACTIVO" ;
+                 :tieneFechaOperacion "2026-11-20T00:00:00"^^xsd:dateTime ;
+                 :tieneIdAporte 1 ;
+                 :tieneMontoAporte "500000.00"^^xsd:decimal ;
+                 :tieneUUIDOperacion "d51c93a7-59e0-4d52-844f-a6f0c1d11a01"^^xsd:string .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/restaurantes
+:restaurantes rdf:type owl:NamedIndividual ,
+                       :CategoriaGasto ;
+              :tieneComportamiento :variable ;
+              :tieneNaturaleza :discrecional ;
+              :tieneNombreCategoria "Restaurantes" .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/salario
+:salario rdf:type owl:NamedIndividual ,
+                  :CategoriaIngreso ;
+         :tieneNombreCategoria "Salario" .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/transferencia001
+:transferencia001 rdf:type owl:NamedIndividual ,
+                           :Transferencia ;
+                  :tieneCuentaDestino :cuentaBancolombia ;
+                  :tieneCuentaOrigen :cuentaNequi ;
+                  :tieneMonto 200000 .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/transporte
+:transporte rdf:type owl:NamedIndividual ,
+                     :CategoriaGasto ;
+            :tieneComportamiento :variable ;
+            :tieneNaturaleza :necesaria ;
+            :tieneNombreCategoria "Transporte" .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/usuarioDemo
+:usuarioDemo rdf:type owl:NamedIndividual ,
+                      :Usuario ;
+             :tieneCuenta :cuentaNequi ;
+             :tieneMeta :metaViaje ;
+             :tieneObligacion :creditoMoto ;
+             :tienePresupuesto :presupuestoAlimentacion .
+
+
+###  http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/variable
+:variable rdf:type owl:NamedIndividual ,
+                   :ComportamientoGasto .
+
+
+###  Generated by the OWL API (version 4.5.29.2024-05-13T12:11:03Z) https://github.com/owlcs/owlapi

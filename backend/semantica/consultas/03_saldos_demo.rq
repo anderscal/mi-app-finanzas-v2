@@ -1,0 +1,19 @@
+
+PREFIX : <http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/>
+
+SELECT
+    ?cuenta
+    ?nombre
+    ?real
+    ?reservado
+    ?libre
+
+WHERE {
+    ?cuenta a :CuentaFinanciera ;
+            :tieneNombreCuenta ?nombre ;
+            :tieneSaldoReal ?real ;
+            :tieneMontoReservado ?reservado ;
+            :tieneSaldoLibre ?libre .
+}
+
+ORDER BY ?nombre

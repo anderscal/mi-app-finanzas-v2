@@ -4,37 +4,37 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    field_validator
+    field_validator,
+    model_validator,
 )
+
 
 class MovimientoNormalCrear(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     uuid_local: UUID
-
     id_cuenta: int = Field(gt=0)
-
     id_categoria: int = Field(gt=0)
-
     tipo: Literal["INGRESO", "GASTO"]
 
     monto: Decimal = Field(
         gt=Decimal("0"),
         max_digits=15,
-        decimal_places=2
+        decimal_places=2,
     )
 
     fecha_movimiento: date
 
     descripcion: str | None = Field(
         default=None,
-        max_length=255
+        max_length=255,
     )
+
+    aplica_gmf: bool = False
 
     @field_validator("fecha_movimiento")
     @classmethod
@@ -45,6 +45,14 @@ class MovimientoNormalCrear(BaseModel):
             )
         return valor
 
+    @model_validator(mode="after")
+    def gmf_solo_para_gastos(self):
+        if self.tipo == "INGRESO" and self.aplica_gmf:
+            raise ValueError(
+                "El GMF solo puede marcarse en un gasto normal"
+            )
+        return self
+
 
 class MovimientoNormalRespuesta(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -53,20 +61,34 @@ class MovimientoNormalRespuesta(BaseModel):
     uuid_local: UUID
     id_cuenta: int
     id_categoria: int
+
     tipo: Literal["INGRESO", "GASTO"]
     origen: Literal["NORMAL"]
+
     monto: Decimal
     fecha_movimiento: date
     descripcion: str | None
+
+    aplica_gmf: bool
+    monto_gmf: Decimal
+
     estado: Literal["ACTIVO", "ANULADO"]
+
 
 class RegistroMovimientoRespuesta(BaseModel):
     id_movimiento: int
     uuid_local: UUID
+
     tipo: Literal["INGRESO", "GASTO"]
     monto: Decimal
+
+    aplica_gmf: bool
+    monto_gmf: Decimal
+
     creado: bool
     mensaje: str
+
+
 class TransferenciaCrear(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -78,7 +100,7 @@ class TransferenciaCrear(BaseModel):
     monto: Decimal = Field(
         gt=Decimal("0"),
         max_digits=15,
-        decimal_places=2
+        decimal_places=2,
     )
 
     fecha_transferencia: date
@@ -86,7 +108,7 @@ class TransferenciaCrear(BaseModel):
     motivo: str = Field(
         default="Movimiento interno",
         min_length=1,
-        max_length=150
+        max_length=150,
     )
 
     aplica_gmf: bool = False
@@ -117,6 +139,7 @@ class TransferenciaRespuesta(BaseModel):
     creado: bool
     mensaje: str
 
+
 class AbonoObligacionCrear(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -128,7 +151,7 @@ class AbonoObligacionCrear(BaseModel):
     monto: Decimal = Field(
         gt=Decimal("0"),
         max_digits=15,
-        decimal_places=2
+        decimal_places=2,
     )
 
     fecha_movimiento: date
@@ -164,6 +187,7 @@ class AbonoObligacionRespuesta(BaseModel):
 
     creado: bool
     mensaje: str
+
 
 class AnulacionMovimientoRespuesta(BaseModel):
     id_movimiento: int

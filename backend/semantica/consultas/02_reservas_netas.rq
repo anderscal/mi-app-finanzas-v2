@@ -1,0 +1,32 @@
+
+PREFIX : <http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/>
+
+SELECT
+    ?meta
+    ?cuenta
+    (
+        SUM(
+            IF(
+                ?clase = :ReservaMeta,
+                ?monto,
+                -?monto
+            )
+        ) AS ?neto
+    )
+
+WHERE {
+    VALUES ?clase {
+        :ReservaMeta
+        :LiberacionMeta
+    }
+
+    ?evento a ?clase ;
+            :correspondeAMeta ?meta ;
+            :seRealizaDesdeCuenta ?cuenta ;
+            :tieneMontoAporte ?monto ;
+            :tieneEstadoAporte "ACTIVO" .
+}
+
+GROUP BY ?meta ?cuenta
+
+ORDER BY ?meta ?cuenta

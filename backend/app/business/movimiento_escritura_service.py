@@ -1,4 +1,6 @@
 
+from decimal import Decimal, ROUND_HALF_UP
+
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -21,9 +23,27 @@ from app.business.saldo_libre_service import (
 )
 
 
+TASA_GMF = Decimal("0.004")
+CERO = Decimal("0.00")
+
+
+def calcular_gmf_normal(
+    datos: MovimientoNormalCrear
+) -> Decimal:
+    if datos.tipo != "GASTO" or not datos.aplica_gmf:
+        return CERO
+
+    return (
+        datos.monto * TASA_GMF
+    ).quantize(
+        Decimal("0.01"),
+        rounding=ROUND_HALF_UP,
+    )
+
+
 def misma_solicitud(
     movimiento: Movimiento,
-    datos: MovimientoNormalCrear
+    datos: MovimientoNormalCrear,
 ) -> bool:
     return (
         movimiento.id_cuenta == datos.id_cuenta
@@ -33,6 +53,8 @@ def misma_solicitud(
         and movimiento.monto == datos.monto
         and movimiento.fecha_movimiento == datos.fecha_movimiento
         and movimiento.descripcion == datos.descripcion
+        and movimiento.aplica_gmf == datos.aplica_gmf
+        and movimiento.monto_gmf == calcular_gmf_normal(datos)
     )
 
 
@@ -45,6 +67,8 @@ def respuesta_movimiento(
         "uuid_local": movimiento.uuid_local,
         "tipo": movimiento.tipo,
         "monto": movimiento.monto,
+        "aplica_gmf": movimiento.aplica_gmf,
+        "monto_gmf": movimiento.monto_gmf,
         "creado": creado,
         "mensaje": (
             "Movimiento registrado correctamente"
@@ -57,7 +81,7 @@ def respuesta_movimiento(
 def _validar_reintento(
     db: Session,
     id_usuario: int,
-    datos: MovimientoNormalCrear
+    datos: MovimientoNormalCrear,
 ):
     existente = buscar_movimiento_uuid(
         db,
@@ -70,7 +94,7 @@ def _validar_reintento(
     if not misma_solicitud(existente, datos):
         raise HTTPException(
             status_code=409,
-            detail="UUID utilizado por otra operación"
+            detail="UUID utilizado por otra operación",
         )
 
     cuenta = bloquear_cuenta(
@@ -82,13 +106,13 @@ def _validar_reintento(
     if cuenta is None:
         raise HTTPException(
             status_code=404,
-            detail="Movimiento no encontrado"
+            detail="Movimiento no encontrado",
         )
 
     if existente.estado != "ACTIVO":
         raise HTTPException(
             status_code=409,
-            detail="La operación ya no está activa"
+            detail="La operación ya no está activa",
         )
 
     return respuesta_movimiento(
@@ -100,16 +124,17 @@ def _validar_reintento(
 def registrar_movimiento_normal(
     db: Session,
     id_usuario: int,
-    datos: MovimientoNormalCrear
+    datos: MovimientoNormalCrear,
 ):
     if id_usuario <= 0:
         raise HTTPException(
             status_code=401,
-            detail="Usuario no válido"
+            detail="Usuario no válido",
         )
 
     try:
-        # Primero reconocer un movimiento confirmado.
+        # 1. Si el UUID ya se confirmó,
+        # no volver a descontar el GMF.
         resultado = _validar_reintento(
             db,
             id_usuario,
@@ -120,7 +145,8 @@ def registrar_movimiento_normal(
             db.rollback()
             return resultado
 
-        # Serializar escrituras sobre la cuenta.
+        # 2. Bloquear la cuenta para
+        # validar el saldo y las reservas.
         cuenta = bloquear_cuenta(
             db,
             datos.id_cuenta,
@@ -130,17 +156,17 @@ def registrar_movimiento_normal(
         if cuenta is None:
             raise HTTPException(
                 status_code=404,
-                detail="Cuenta no encontrada"
+                detail="Cuenta no encontrada",
             )
 
         if cuenta.estado != "ACTIVA":
             raise HTTPException(
                 status_code=409,
-                detail="La cuenta está inactiva"
+                detail="La cuenta está inactiva",
             )
 
-        # Otro intento pudo confirmar el UUID
-        # mientras esperábamos el bloqueo.
+        # 3. Reconocer una operación que
+        # finalizó mientras se esperaba el bloqueo.
         resultado = _validar_reintento(
             db,
             id_usuario,
@@ -151,6 +177,7 @@ def registrar_movimiento_normal(
             db.rollback()
             return resultado
 
+        # 4. Validar la categoría.
         categoria = buscar_categoria(
             db,
             datos.id_categoria
@@ -159,13 +186,13 @@ def registrar_movimiento_normal(
         if categoria is None:
             raise HTTPException(
                 status_code=404,
-                detail="Categoría no encontrada"
+                detail="Categoría no encontrada",
             )
 
         if categoria.estado != "ACTIVA":
             raise HTTPException(
                 status_code=409,
-                detail="Categoría inactiva"
+                detail="Categoría inactiva",
             )
 
         if categoria.tipo_categoria != datos.tipo:
@@ -174,7 +201,7 @@ def registrar_movimiento_normal(
                 detail=(
                     "La categoría no corresponde "
                     "al tipo de movimiento"
-                )
+                ),
             )
 
         if not (
@@ -183,18 +210,23 @@ def registrar_movimiento_normal(
         ):
             raise HTTPException(
                 status_code=403,
-                detail="Categoría no autorizada"
+                detail="Categoría no autorizada",
             )
 
-        # NUEVA REGLA: un gasto solo puede
-        # consumir dinero no reservado.
+        # 5. Calcular GMF en el backend.
+        monto_gmf = calcular_gmf_normal(datos)
+
         if datos.tipo == "GASTO":
+            # NUEVA REGLA:
+            # el dinero libre debe cubrir
+            # el gasto y el impuesto.
             exigir_saldo_libre(
                 db,
                 cuenta,
-                datos.monto
+                datos.monto + monto_gmf
             )
 
+        # 6. Crear el movimiento con GMF.
         nuevo = Movimiento(
             uuid_local=datos.uuid_local,
             id_cuenta=datos.id_cuenta,
@@ -206,8 +238,8 @@ def registrar_movimiento_normal(
             monto=datos.monto,
             fecha_movimiento=datos.fecha_movimiento,
             descripcion=datos.descripcion,
-            aplica_gmf=False,
-            monto_gmf=0,
+            aplica_gmf=datos.aplica_gmf,
+            monto_gmf=monto_gmf,
             estado="ACTIVO",
         )
 
@@ -226,12 +258,13 @@ def registrar_movimiento_normal(
 
     except IntegrityError:
         db.rollback()
+
         raise HTTPException(
             status_code=409,
             detail=(
                 "Conflicto de integridad al registrar "
                 "el movimiento"
-            )
+            ),
         )
 
     except Exception:

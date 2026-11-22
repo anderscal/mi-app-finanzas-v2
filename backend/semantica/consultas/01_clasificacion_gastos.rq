@@ -1,0 +1,17 @@
+
+PREFIX : <http://www.semanticweb.org/user/ontologies/2026/8/untitled-ontology-20/>
+
+SELECT
+    ?categoria
+    ?nombre
+    ?naturaleza
+    ?comportamiento
+
+WHERE {
+    ?categoria a :CategoriaGasto ;
+               :tieneNombreCategoria ?nombre ;
+               :tieneNaturaleza ?naturaleza ;
+               :tieneComportamiento ?comportamiento .
+}
+
+ORDER BY ?nombre
