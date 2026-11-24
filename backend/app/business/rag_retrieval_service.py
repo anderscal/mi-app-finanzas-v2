@@ -1,54 +1,25 @@
+"""Recuperacion hibrida del RAG. Business."""
 
-"""Recuperacion eficiente del contexto RAG.
+from datetime import datetime, timezone
 
-Business Layer.
+from sqlalchemy.exc import SQLAlchemyError
 
-Seleccion de temas y validacion del alcance temporal.
-Conserva la recuperacion financiera completa.
-"""
-
-from collections import defaultdict
-from datetime import date
-from decimal import Decimal
-
-from fastapi import HTTPException
-from sqlalchemy.orm import Session
-
-from app.business.movimiento_service import (
-    calcular_periodo,
-    consultar_resumen_mensual,
+from app.business.rag_contrato import (
+    CATALOGO,
+    Consulta,
+    preparar_consulta,
 )
 
-from app.business.planificacion_service import (
-    consultar_planificacion,
-    TEMAS_PLANIFICACION,
+from app.business.rag_contexto_ia import (
+    serializar,
 )
 
-from app.business.rag_intencion import (
-    interpretar_pregunta,
-    normalizar,
+from app.persistence.rag_consulta_repository import (
+    ejecutar_consulta_sql,
 )
 
-from app.business.rag_alcance import (
-    resolver_periodo,
-    mes_anterior,
-    AlcanceNoAdmitido,
-)
-
-from app.business.rag_relaciones_276 import (
-    resumir_reservas,
-)
-
-from app.persistence.cuenta_repository import (
-    obtener_cuentas_con_saldo,
-)
-
-from app.persistence.movimiento_repository import (
-    obtener_movimientos_mes,
-)
-
-from app.persistence.rag_financiero_repository import (
-    obtener_aportes_vinculados,
+from app.persistence.rag_semantico_consulta_repository import (
+    ejecutar_consulta_rdf,
 )
 
 from app.persistence.rag_semantico_basico_repository import (
@@ -61,476 +32,377 @@ from app.persistence.rag_semantico_repository import (
 
 from app.services.fuseki_client import (
     consultar_select,
+    FusekiNoDisponible,
+)
+
+from app.services.semantica_auto_sync import (
+    asegurar_actualizacion_para_rag,
 )
 
 
-CERO = Decimal("0.00")
+class ErrorRAG(Exception):
+
+    def __init__(self, codigo, mensaje):
+
+        super().__init__(mensaje)
+
+        self.codigo = codigo
 
 
-def _normalizar(texto: str) -> str:
-    return normalizar(texto)
+def evaluar_vigencia_rdf(
+    fecha_texto,
+    ahora=None,
+):
 
+    desconocida = {
+        "estado": "DESCONOCIDA",
+        "antiguedad_horas": None,
+    }
 
-def _periodo(pregunta: str, hoy: date):
-
-    try:
-
-        return resolver_periodo(
-            pregunta,
-            hoy,
-        )
-
-    except AlcanceNoAdmitido as error:
-
-        raise HTTPException(
-            status_code=422,
-            detail=str(error),
-        ) from error
-
-
-def _temas_relevantes(
-    pregunta: str,
-) -> set[str]:
-
-    return set(
-        interpretar_pregunta(pregunta).temas
-    )
-
-
-def _datos_sparql(
-    id_usuario: int,
-    incluir_categorias: bool = True,
-) -> dict:
+    if not isinstance(fecha_texto, str):
+        return desconocida
 
     try:
 
-        return obtener_contexto_semantico_basico(
-            id_usuario=id_usuario,
-            incluir_categorias=incluir_categorias,
-            ejecutar=consultar_select,
+        fecha = datetime.fromisoformat(
+            fecha_texto.replace(
+                "Z", "+00:00"
+            )
         )
 
-    except EvidenciaSemanticaInvalida as error:
+    except (
+        ValueError,
+        TypeError,
+        OverflowError,
+    ):
 
-        raise HTTPException(
-            status_code=409,
-            detail=str(error),
-        ) from error
+        return desconocida
 
+    if fecha.tzinfo is None:
+        return desconocida
 
-def _construir_cuentas(
-    db: Session,
-    id_usuario: int,
-    reservas_por_par: dict,
-) -> list[dict]:
-
-    reservado_por_cuenta = defaultdict(
-        lambda: CERO
+    ahora = (
+        ahora
+        or datetime.now(timezone.utc)
     )
 
-    for (_, id_cuenta), monto in (
-        reservas_por_par.items()
-    ):
+    if ahora.tzinfo is None:
+        return desconocida
 
-        reservado_por_cuenta[id_cuenta] += monto
+    horas = (
+        ahora.astimezone(timezone.utc)
+        - fecha.astimezone(timezone.utc)
+    ).total_seconds() / 3600
 
-    cuentas = []
+    if horas < -(5 / 60):
+        return desconocida
 
-    for fila in obtener_cuentas_con_saldo(
-        db,
-        id_usuario,
-    ):
-
-        if fila["estado"] != "ACTIVA":
-            continue
-
-        real = Decimal(
-            fila["saldo_actual"]
-        )
-
-        reservado = reservado_por_cuenta[
-            fila["id_cuenta"]
-        ]
-
-        libre = real - reservado
-
-        if reservado < CERO or libre < CERO:
-
-            raise HTTPException(
-                status_code=409,
-                detail="Saldos y reservas inconsistentes",
-            )
-
-        cuentas.append({
-            "id_cuenta": fila["id_cuenta"],
-            "nombre": fila["nombre_cuenta"],
-            "tipo": fila["tipo_cuenta"],
-            "saldo_real": str(real),
-            "reservado": str(reservado),
-            "saldo_libre": str(libre),
-        })
-
-    return cuentas
-
-
-def _resumen_cuentas(cuentas: list[dict]) -> dict:
-
-    def total(campo):
-
-        return str(
-            sum(
-                (
-                    Decimal(cuenta[campo])
-                    for cuenta in cuentas
-                ),
-                CERO,
-            )
-        )
+    horas = max(horas, 0)
 
     return {
-        "numero_cuentas_activas": len(cuentas),
-        "saldo_real_total": total("saldo_real"),
-        "reservado_total": total("reservado"),
-        "saldo_libre_total": total("saldo_libre"),
+        "estado": (
+            "RECIENTE"
+            if horas <= 24
+            else "ANTIGUA"
+        ),
+
+        "antiguedad_horas": round(
+            horas, 2
+        ),
     }
 
 
-def _construir_movimientos(
-    db: Session,
-    id_usuario: int,
-    anio: int,
-    mes: int,
-) -> dict:
+def _preparar_semantica(db, usuario):
 
-    inicio, fin = calcular_periodo(
-        anio,
-        mes,
-    )
-
-    resumen = consultar_resumen_mensual(
+    asegurar_actualizacion_para_rag(
         db,
-        id_usuario,
-        anio,
-        mes,
+        usuario,
     )
 
-    movimientos = obtener_movimientos_mes(
-        db,
-        id_usuario,
-        inicio,
-        fin,
+    contexto = obtener_contexto_semantico_basico(
+        id_usuario=usuario,
+
+        incluir_categorias=False,
+
+        ejecutar=consultar_select,
     )
 
-    gastos = defaultdict(
-        lambda: CERO
+    vigencia = evaluar_vigencia_rdf(
+        contexto.get("fecha_instantanea")
     )
 
-    for movimiento in movimientos:
+    if vigencia["estado"] != "RECIENTE":
 
-        if (
-            movimiento["estado"] != "ACTIVO"
-            or movimiento["origen"] != "NORMAL"
-            or movimiento["tipo"] != "GASTO"
-        ):
-            continue
+        raise ErrorRAG(
+            409,
 
-        categoria = (
-            movimiento["nombre_categoria"]
-            or "Sin categoría"
+            "No se puede verificar que el conocimiento "
+            "semántico esté actualizado. "
+            "La consulta requiere una instantánea RDF vigente.",
         )
-
-        gastos[categoria] += (
-            Decimal(movimiento["monto"])
-            + Decimal(movimiento["monto_gmf"])
-        )
-
-    ordenados = sorted(
-        gastos.items(),
-        key=lambda item: item[1],
-        reverse=True,
-    )
 
     return {
-        "resumen_mensual": {
+        "fecha_instantanea": contexto[
+            "fecha_instantanea"
+        ],
 
-            "ingresos_ordinarios": str(
-                resumen["ingresos_ordinarios"]
-            ),
+        "vigencia": vigencia["estado"],
 
-            "gastos_ordinarios": str(
-                resumen["gastos_ordinarios"]
-            ),
-
-            "gmf_total": str(
-                resumen["gmf_total"]
-            ),
-        },
-
-        "gastos_por_categoria": [
-            {
-                "categoria": nombre,
-                "total_incluido_gmf": str(total),
-            }
-
-            for nombre, total in ordenados
+        "antiguedad_horas": vigencia[
+            "antiguedad_horas"
         ],
     }
 
 
-def construir_contexto_rag(
-    db: Session,
-    id_usuario: int,
-    pregunta: str,
-    hoy: date | None = None,
-) -> dict:
+def recuperar_plan(
+    db,
+    usuario,
+    plan,
+    registro,
+):
 
-    if type(id_usuario) is not int or id_usuario <= 0:
+    if type(usuario) is not int or usuario <= 0:
 
-        raise ValueError("Usuario inválido")
-
-    hoy = hoy or date.today()
-
-    anio, mes = _periodo(
-        pregunta,
-        hoy,
-    )
-
-    temas = _temas_relevantes(
-        pregunta
-    )
-
-    periodo_actual = (
-        anio,
-        mes,
-    ) == (
-        hoy.year,
-        hoy.month,
-    )
-
-    # Movimientos y presupuestos se pueden
-    # recuperar por mes.
-    #
-    # Cuentas, metas, reservas y obligaciones
-    # representan el estado actual y no deben
-    # presentarse como instantaneas historicas.
-
-    if (
-        not periodo_actual
-
-        and temas.intersection({
-            "cuentas",
-            "metas",
-            "obligaciones",
-        })
-    ):
-
-        raise HTTPException(
-            status_code=422,
-
-            detail=(
-                "El período histórico solo se admite "
-                "para movimientos y presupuestos. "
-                "Consulta las cuentas, metas y "
-                "obligaciones actuales por separado."
-            ),
+        raise ErrorRAG(
+            403,
+            "Usuario no autorizado.",
         )
 
-    if periodo_actual:
+    # Se validan y convierten todas las consultas
+    # antes de ejecutar cualquiera de ellas.
 
-        interpretacion = "Mes actual"
+    try:
 
-    elif (
-        anio,
-        mes,
-    ) == mes_anterior(hoy):
-
-        interpretacion = "Mes pasado"
-
-    else:
-
-        interpretacion = "Mes histórico solicitado"
-
-    evidencia_sql = {}
-    analisis = {}
-
-    # PLANIFICACION SELECTIVA
-
-    temas_plan = temas.intersection(
-        TEMAS_PLANIFICACION
-    )
-
-    plan = {}
-
-    if temas_plan:
-
-        plan = consultar_planificacion(
-            db,
-            id_usuario,
-            temas=temas_plan,
-        )
-
-    # RESERVAS COMPARTIDAS
-
-    if temas.intersection({
-        "cuentas",
-        "metas",
-    }):
-
-        filas = obtener_aportes_vinculados(
-            db,
-            id_usuario,
-        )
-
-        resumen_reservas, pares = (
-            resumir_reservas(filas)
-        )
-
-        if "metas" in temas:
-
-            analisis["reservas"] = (
-                resumen_reservas
+        consultas = [
+            preparar_consulta(
+                consulta,
+                registro.restaurar_filtro,
             )
 
-        if "cuentas" in temas:
+            for consulta in plan.consultas
+        ]
 
-            cuentas = _construir_cuentas(
+    except ValueError as error:
+
+        raise ErrorRAG(
+            422,
+            "El plan contiene filtros no válidos.",
+        ) from error
+
+    resultados = []
+
+    semantica = None
+
+    try:
+
+        if any(
+            consulta["entidad"].startswith("rdf_")
+
+            for consulta in consultas
+        ):
+
+            semantica = _preparar_semantica(
                 db,
-                id_usuario,
-                pares,
+                usuario,
             )
 
-            evidencia_sql["cuentas"] = (
-                cuentas
-            )
+        for indice, consulta in enumerate(
+            consultas,
+            start=1,
+        ):
 
-            analisis["cuentas"] = (
-                _resumen_cuentas(cuentas)
-            )
+            if consulta["entidad"].startswith("rdf_"):
 
-    # MOVIMIENTOS
+                resultado = ejecutar_consulta_rdf(
+                    usuario,
+                    consulta,
+                    consultar_select,
+                )
 
-    if "movimientos" in temas:
+                resultado.update({
+                    "fecha_instantanea": semantica[
+                        "fecha_instantanea"
+                    ],
+                    "vigencia_rdf": semantica[
+                        "vigencia"
+                    ],
+                })
 
-        evidencia_sql.update(
-            _construir_movimientos(
-                db,
-                id_usuario,
-                anio,
-                mes,
-            )
-        )
+            else:
 
-    # PRESUPUESTOS
+                resultado = ejecutar_consulta_sql(
+                    db,
+                    usuario,
+                    consulta,
+                )
 
-    if "presupuestos" in temas:
+            resultado.update({
 
-        evidencia_sql["presupuestos"] = [
-            {
-                "categoria": p["categoria"],
-                "limite": str(p["monto_limite"]),
-                "gastado": str(p["gastado"]),
-                "disponible": str(p["disponible"]),
-                "porcentaje_usado": str(
-                    p["porcentaje_usado"]
-                ),
-            }
+                "referencia": f"E{indice}",
 
-            for p in plan["presupuestos"]
+                "campos": consulta["campos"],
 
-            if p["anio"] == anio
-            and p["mes"] == mes
-        ]
+                "campo_agregado": consulta["campo"],
 
-    # METAS
+                "filtros": consulta["filtros"],
 
-    if "metas" in temas:
+                "agrupar_por": consulta["agrupar_por"],
 
-        evidencia_sql["metas"] = [
-            {
-                "id_meta": m["id_meta"],
-                "nombre": m["nombre_meta"],
-                "objetivo": str(m["monto_objetivo"]),
-                "acumulado": str(m["monto_acumulado"]),
-                "progreso_porcentaje": str(
-                    m["porcentaje_progreso"]
-                ),
-                "estado": m["estado"],
-            }
+                "orden_campo": consulta["orden_campo"],
 
-            for m in plan["metas"]
-        ]
-
-    # OBLIGACIONES
-
-    if "obligaciones" in temas:
-
-        evidencia_sql["obligaciones"] = [
-            {
-                "id_obligacion": o["id_obligacion"],
-                "nombre": o["nombre_obligacion"],
-                "tipo": o["tipo_obligacion"],
-                "pendiente": str(o["monto_pendiente"]),
-                "estado": o["estado"],
-            }
-
-            for o in plan["obligaciones"]
-        ]
-
-    # RECUPERACION SEMANTICA SELECTIVA
-
-    semantica = _datos_sparql(
-        id_usuario,
-
-        incluir_categorias=bool(
-            temas.intersection({
-                "movimientos",
-                "presupuestos",
+                "descendente": consulta["descendente"],
             })
-        ),
-    )
+
+            resultados.append(resultado)
+
+    except FusekiNoDisponible as error:
+
+        raise ErrorRAG(
+            503,
+
+            "Fuseki no está disponible. "
+            "No se pudo recuperar el conocimiento "
+            "semántico solicitado.",
+        ) from error
+
+    except EvidenciaSemanticaInvalida as error:
+
+        raise ErrorRAG(
+            409,
+
+            "No se obtuvo evidencia semántica válida.",
+        ) from error
+
+    except SQLAlchemyError as error:
+
+        raise ErrorRAG(
+            503,
+
+            "No fue posible recuperar los datos financieros.",
+        ) from error
+
+    except RuntimeError as error:
+
+        raise ErrorRAG(
+            503,
+
+            "No fue posible completar la sincronización "
+            "o recuperación de la evidencia.",
+        ) from error
+
+    except ValueError as error:
+
+        raise ErrorRAG(
+            409,
+
+            "La evidencia recuperada no cumple "
+            "el contrato esperado.",
+        ) from error
+
+    return resultados
+
+
+def diagnostico_sin_ia(
+    db,
+    usuario,
+    pregunta,
+):
+    """Diagnostico independiente del planificador Gemini.
+
+    No pretende interpretar preguntas en lenguaje natural.
+    Recupera conteos de las entidades disponibles.
+    """
+
+    conteos = {}
+
+    try:
+
+        for entidad in CATALOGO:
+
+            if entidad.startswith("rdf_"):
+                continue
+
+            consulta = Consulta(
+                entidad=entidad,
+
+                operacion="contar",
+
+                limite=1,
+            )
+
+            resultado = ejecutar_consulta_sql(
+                db,
+                usuario,
+                preparar_consulta(
+                    consulta,
+                    lambda valor: valor,
+                ),
+            )
+
+            conteos[entidad] = (
+                resultado["filas"][0]["valor"]
+            )
+
+        semantica = _preparar_semantica(
+            db,
+            usuario,
+        )
+
+    except FusekiNoDisponible as error:
+
+        raise ErrorRAG(
+            503,
+            "Fuseki no está disponible.",
+        ) from error
+
+    except EvidenciaSemanticaInvalida as error:
+
+        raise ErrorRAG(
+            409,
+            "No se obtuvo evidencia semántica válida.",
+        ) from error
+
+    except (SQLAlchemyError, RuntimeError) as error:
+
+        raise ErrorRAG(
+            503,
+            "No fue posible completar el diagnóstico.",
+        ) from error
 
     return {
         "pregunta": pregunta,
 
-        "periodo": {
-            "anio": anio,
-            "mes": mes,
-            "interpretacion": interpretacion,
-        },
+        "alcance": (
+            "Diagnóstico general de fuentes sin IA. "
+            "No interpreta ni responde la pregunta escrita."
+        ),
+
+        "periodo": None,
 
         "moneda": "COP",
 
-        "temas_recuperados": sorted(
-            temas
-        ),
-
-        "postgresql": evidencia_sql,
-
-        "analisis_financiero": analisis,
+        "postgresql": {
+            "conteos": serializar(conteos),
+        },
 
         "fuseki": semantica,
+
+        "catalogo": CATALOGO,
 
         "fuentes": [
             {
                 "origen": "PostgreSQL",
-                "tipo": "datos financieros recuperados",
+                "tipo": "Conteos de entidades",
             },
             {
                 "origen": "Fuseki/SPARQL",
-                "tipo": "grafo semántico del usuario",
-                "fecha": semantica["fecha_instantanea"],
+                "tipo": "Metadatos de la instantánea RDF",
             },
         ],
 
         "limitaciones": [
-            "Los importes financieros provienen de PostgreSQL.",
-            "Fuseki contiene una instantánea que puede estar desactualizada.",
-            "El análisis no incluye operaciones offline sin sincronizar.",
-            "Se admite el mes actual, anterior o un mes y año explícitos.",
-            "Los períodos históricos se limitan a movimientos y presupuestos.",
-            "Los saldos, metas y obligaciones representan su estado actual.",
-            "Los gastos por categoría incluyen GMF cuando existe.",
-            "Las categorías RDF describen el grafo publicado, no una instantánea histórica del mes solicitado.",
-            "No se exportan descripciones de movimientos ni credenciales.",
+            "Este diagnóstico no utiliza Gemini.",
+            "Los conteos incluyen los estados registrados.",
+            "No incluye operaciones offline pendientes.",
         ],
     }
