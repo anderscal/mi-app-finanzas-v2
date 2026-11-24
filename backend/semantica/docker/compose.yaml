@@ -1,0 +1,35 @@
+
+name: finanzas-semantica
+
+services:
+  fuseki:
+    container_name: finanzas-fuseki-tdb2
+
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        JENA_VERSION: "6.3.0"
+
+    ports:
+      - "127.0.0.1:3030:3030"
+
+    volumes:
+      - datos_tdb2:/datos/tdb2
+
+    command:
+      - "--tdb2"
+      - "--update"
+      - "--loc=/datos/tdb2"
+      - "/finanzas_demo"
+
+    environment:
+      JAVA_TOOL_OPTIONS: "-Xms128m -Xmx768m"
+
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+volumes:
+  datos_tdb2:
+    name: finanzas_tdb2_263

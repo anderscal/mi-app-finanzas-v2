@@ -1,3 +1,4 @@
+
 from fastapi import APIRouter, Query
 
 from app.dependencies import (
@@ -14,10 +15,15 @@ from app.business.planificacion_service import (
     consultar_planificacion,
 )
 
+from app.routers import (
+    semantica_router,
+    rag_router,
+)
+
 
 router = APIRouter(
     prefix="/consultas",
-    tags=["Consultas financieras"]
+    tags=["Consultas financieras"],
 )
 
 
@@ -25,22 +31,14 @@ router = APIRouter(
 def resumen_mensual(
     db: SesionBD,
     usuario: UsuarioActual,
-    anio: int = Query(
-        ...,
-        ge=2000,
-        le=9998
-    ),
-    mes: int = Query(
-        ...,
-        ge=1,
-        le=12
-    )
+    anio: int = Query(..., ge=2000, le=9998),
+    mes: int = Query(..., ge=1, le=12),
 ):
     return consultar_resumen_mensual(
         db=db,
         id_usuario=usuario.id_usuario,
         anio=anio,
-        mes=mes
+        mes=mes,
     )
 
 
@@ -48,31 +46,30 @@ def resumen_mensual(
 def historial_mensual(
     db: SesionBD,
     usuario: UsuarioActual,
-    anio: int = Query(
-        ...,
-        ge=2000,
-        le=9998
-    ),
-    mes: int = Query(
-        ...,
-        ge=1,
-        le=12
-    )
+    anio: int = Query(..., ge=2000, le=9998),
+    mes: int = Query(..., ge=1, le=12),
 ):
     return consultar_historial_mensual(
         db=db,
         id_usuario=usuario.id_usuario,
         anio=anio,
-        mes=mes
+        mes=mes,
     )
 
 
 @router.get("/planificacion")
 def planificacion(
     db: SesionBD,
-    usuario: UsuarioActual
+    usuario: UsuarioActual,
 ):
     return consultar_planificacion(
         db=db,
-        id_usuario=usuario.id_usuario
+        id_usuario=usuario.id_usuario,
     )
+
+
+# Integración PostgreSQL / RDF / SPARQL:
+router.include_router(semantica_router.router)
+
+# Motor RAG:
+router.include_router(rag_router.router)

@@ -1,6 +1,21 @@
+"""Punto de entrada y composicion de la aplicacion.
+
+Inicializa los componentes y registra las rutas.
+No contiene reglas financieras ni consultas SQL.
+"""
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+
+# Registro explicito de eventos de sincronizacion RDF.
+# Al importar el modulo se registran sus listeners
+# sobre SesionFinanciera.
+#
+# Este registro ya no depende de database.py.
+
+import app.services.semantica_auto_sync  # noqa: F401
+
 
 from app.routers import (
     auth_router,
@@ -17,29 +32,35 @@ from app.routers import (
 
 app = FastAPI(
     title="API Finanzas Personales",
+
     description=(
         "Backend del sistema de "
         "gestión financiera personal"
     ),
+
     version="1.0.0",
 )
 
 
 app.add_middleware(
     CORSMiddleware,
+
     allow_origins=[
         "http://127.0.0.1:5500",
         "http://localhost:5500",
         "http://127.0.0.1:5501",
         "http://localhost:5501",
     ],
+
     allow_credentials=False,
+
     allow_methods=[
         "GET",
         "POST",
         "PATCH",
-        "OPTIONS"
+        "OPTIONS",
     ],
+
     allow_headers=[
         "Authorization",
         "Content-Type",
@@ -60,17 +81,21 @@ app.include_router(meta_router.router)
 
 @app.get("/")
 def inicio():
+
     return {
         "mensaje": (
             "Bienvenido a la API de Finanzas Personales"
         ),
+
         "estado": "funcionando",
     }
 
 
 @app.get("/salud")
 def verificar_salud():
+
     return {
         "servicio": "FastAPI",
-        "estado": "activo"
-    }
+
+        "estado": "activo",
+    } 
