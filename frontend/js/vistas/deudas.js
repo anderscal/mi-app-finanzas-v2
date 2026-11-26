@@ -1495,7 +1495,7 @@ export async function render(c) {
 
     } catch {
       mensaje.textContent =
-        'No se pudo verificar la cola offline. ' +
+        'No se pudieron verificar las operaciones pendientes. ' +
         'No se desactivó la obligación.';
       return;
     }

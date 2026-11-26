@@ -1,6 +1,6 @@
 // Service Worker: solo recursos estaticos de la PWA.
 
-const VERSION = 'fp-v30';
+const VERSION = 'fp-v31';
 
 const ARCHIVOS = [
   './',

@@ -392,13 +392,13 @@ export async function render(c) {
 
         if (!Array.isArray(locales)) {
           throw new Error(
-            'No se pudo verificar la cola offline.'
+            'No se pudieron verificar las operaciones pendientes.'
           );
         }
 
       } catch {
         mensaje.textContent =
-          'No se pudo verificar la cola offline. ' +
+          'No se pudieron verificar las operaciones pendientes. ' +
           'Por seguridad, no se desactivó la categoría.';
         return;
       }

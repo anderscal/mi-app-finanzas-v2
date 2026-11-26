@@ -224,7 +224,7 @@ async function navegar() {
 
     const mensaje = document.createElement('p');
     mensaje.className = 'error-general';
-    mensaje.textContent = 'No se pudo cargar esta pantalla. ' + (error?.message || '');
+    mensaje.textContent = 'No se pudo cargar esta pantalla. Intenta nuevamente.';
     contenedor.replaceChildren(mensaje);
   }
 }

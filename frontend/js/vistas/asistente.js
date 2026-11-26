@@ -1,4 +1,3 @@
-
 import { banda } from './comun.js';
 
 import {
@@ -7,7 +6,8 @@ import {
 } from '../rag-api.js';
 
 import {
-  obtenerUsuario, obtenerToken
+  obtenerToken,
+  obtenerUsuario
 } from '../sesion.js';
 
 import {
@@ -17,1124 +17,1375 @@ import {
 
 
 const SUGERENCIAS = [
-  '¿Cuánto dinero tengo disponible sin afectar mis metas?',
-  '¿Cuánto pagué de GMF este mes?',
-  '¿En qué categorías estoy gastando más?',
-  '¿Cómo van mis metas de ahorro?',
-  '¿Cómo están mis presupuestos este mes?'
+  [
+    'Saldo disponible',
+    '¿Cuánto dinero tengo disponible sin afectar mis metas?'
+  ],
+  [
+    'Gastos del mes',
+    '¿Cuánto he gastado este mes por categoría?'
+  ],
+  [
+    'Mis metas',
+    '¿Cómo van mis metas de ahorro?'
+  ],
+  [
+    'GMF del mes',
+    '¿Cuánto pagué de GMF este mes?'
+  ],
+  [
+    'Presupuestos',
+    '¿Cómo están mis presupuestos este mes?'
+  ]
 ];
 
 
-/**
- * Dibuja texto de Gemini sin interpretarlo como HTML.
- *
- * Reconoce **negrita** de manera básica.
- * Los textos se insertan usando textContent.
- */
-function textoSeguro(contenedor, contenido) {
-  contenedor.replaceChildren();
+const ETIQUETAS = {
+  cuentas: 'Cuentas',
+  movimientos: 'Movimientos',
+  transferencias: 'Transferencias',
+  obligaciones: 'Obligaciones',
+  metas: 'Metas',
+  presupuestos: 'Presupuestos',
+  reservas: 'Reservas',
+  categorias: 'Categorías',
 
-  const partes = String(
+  rdf_reservas: 'Relaciones de reservas',
+  rdf_movimientos: 'Relaciones de movimientos',
+  rdf_transferencias: 'Relaciones de transferencias',
+  rdf_categorias: 'Categorías relacionadas',
+  rdf_obligaciones: 'Obligaciones relacionadas',
+  rdf_presupuestos: 'Presupuestos relacionados',
+
+  saldo_real: 'Saldo real',
+  saldo_libre: 'Saldo disponible',
+  reservado: 'Reservado',
+  reservado_neto: 'Reserva neta',
+
+  monto_original: 'Monto original',
+  monto_con_gmf: 'Monto con GMF',
+
+  tipo_cuenta: 'Tipo de cuenta',
+  cuenta_origen: 'Cuenta de origen',
+  cuenta_destino: 'Cuenta de destino',
+
+  fecha_inicio: 'Fecha inicial',
+  fecha_vencimiento: 'Vencimiento',
+  fecha_objetivo: 'Fecha objetivo',
+
+  porcentaje_usado: 'Porcentaje usado',
+  anio: 'Año',
+  limite: 'Límite',
+  gmf: 'GMF',
+
+  entidad: 'Entidad',
+  valor: 'Resultado',
+  cantidad: 'Registros incluidos',
+
+  listar: 'Listado',
+  contar: 'Conteo',
+  sumar: 'Suma',
+  promedio: 'Promedio',
+  minimo: 'Mínimo',
+  maximo: 'Máximo',
+
+  igual: '=',
+  distinto: '≠',
+  mayor: '>',
+  menor: '<',
+  mayor_igual: '≥',
+  menor_igual: '≤',
+  contiene: 'contiene',
+  es_nulo: 'sin valor',
+  no_nulo: 'con valor'
+};
+
+
+function etiqueta(valor) {
+  const s = String(valor ?? '');
+
+  return Object.hasOwn(ETIQUETAS, s)
+    ? ETIQUETAS[s]
+    : s.replaceAll('_', ' ');
+}
+
+
+function lista(valor) {
+  return Array.isArray(valor) ? valor : [];
+}
+
+
+function dato(valor) {
+
+  if (valor == null) return 'Sin dato';
+
+  if (typeof valor === 'boolean') {
+    return valor ? 'Sí' : 'No';
+  }
+
+  return typeof valor === 'object'
+    ? JSON.stringify(valor)
+    : String(valor);
+}
+
+
+// ======================================
+// COMPONENTES SEGUROS
+// ======================================
+
+function nodo(tipo, texto, clase) {
+
+  const el = document.createElement(tipo);
+
+  if (texto !== undefined) {
+    el.textContent = texto;
+  }
+
+  if (clase) {
+    el.className = clase;
+  }
+
+  return el;
+}
+
+
+function desplegable(titulo) {
+
+  const el = nodo(
+    'details',
+    undefined,
+    'rag-detalle'
+  );
+
+  el.append(nodo('summary', titulo));
+
+  return el;
+}
+
+
+function jsonTecnico(datos) {
+
+  const el = desplegable(
+    'Datos técnicos (JSON)'
+  );
+
+  el.append(
+    nodo('pre', JSON.stringify(datos, null, 2))
+  );
+
+  return el;
+}
+
+
+function textoSeguro(el, contenido) {
+
+  el.replaceChildren();
+
+  for (const parte of String(
     contenido ?? ''
-  ).split(/(\*\*[^*\n]+\*\*)/g);
+  ).split(/(\*\*[^*\n]+\*\*)/g)) {
 
-  for (const parte of partes) {
     if (!parte) continue;
 
-    if (
-      parte.startsWith('**') &&
-      parte.endsWith('**')
-    ) {
-      const fuerte = document.createElement('strong');
+    el.append(
 
-      fuerte.textContent = parte.slice(2, -2);
+      /^\*\*[^*\n]+\*\*$/.test(parte)
 
-      contenedor.appendChild(fuerte);
+        ? nodo(
+            'strong',
+            parte.slice(2, -2)
+          )
 
-    } else {
-      contenedor.appendChild(
-        document.createTextNode(parte)
-      );
+        : document.createTextNode(parte)
+    );
+  }
+}
+
+
+// ======================================
+// MENSAJES DE ERROR
+// ======================================
+
+function errorVisible(error, modo) {
+
+  if (error instanceof ErrorDeRed) {
+
+    return 'Sin conexión con el servicio.';
+  }
+
+  if (error instanceof ErrorApi) {
+
+    switch (error.estado) {
+
+      case 401:
+        return 'Tu sesión venció. Inicia sesión.';
+
+      case 403:
+        return 'No tienes autorización para esta consulta.';
+
+      case 409:
+        return 'No pude verificar los datos. Intenta más tarde.';
+
+      case 422:
+        return modo === 'ia'
+          ? 'No pude procesar tu consulta. Intenta reformularla.'
+          : 'No pude completar el diagnóstico.';
+
+      case 429:
+        return 'Límite de consultas alcanzado. Intenta más tarde.';
+
+      default:
+
+        if (error.estado >= 500) {
+
+          return 'Servicio temporalmente no disponible.';
+        }
     }
   }
+
+  return 'No se pudo completar la consulta.';
 }
 
 
-function textoError(error) {
-  return error?.message || 'Ocurrió un error al consultar el asistente.';
+// ======================================
+// EVIDENCIA FINANCIERA
+// ======================================
+
+const MONETARIOS = new Set([
+  'saldo_real',
+  'saldo_libre',
+  'reservado',
+  'reservado_neto',
+  'monto',
+  'monto_original',
+  'monto_con_gmf',
+  'gmf',
+  'abonado',
+  'pendiente',
+  'objetivo',
+  'acumulado',
+  'limite',
+  'gastado',
+  'disponible'
+]);
+
+
+function cabeceraCampo(k, evidencia) {
+
+  const campo = (
+    k === 'valor' &&
+    evidencia?.operacion !== 'contar'
+  )
+    ? evidencia?.campo_agregado
+    : k;
+
+  const unidad = MONETARIOS.has(campo)
+
+    ? ' (COP)'
+
+    : [
+        'progreso',
+        'porcentaje_usado'
+      ].includes(campo)
+
+      ? ' (%)'
+
+      : '';
+
+  return etiqueta(k) + unidad;
 }
 
-function periodoTexto(periodo) {
-  if (!periodo) {
-    return 'Período no especificado';
+
+function tabla(filas, evidencia) {
+
+  const registros = lista(filas).filter(
+
+    f => f &&
+      typeof f === 'object' &&
+      !Array.isArray(f)
+  );
+
+  if (!registros.length) {
+
+    return nodo(
+      'p',
+      'Sin registros recuperados.'
+    );
   }
 
-  const anio = Number(periodo.anio);
-  const mes = Number(periodo.mes);
-
-  if (
-    !Number.isInteger(anio) ||
-    !Number.isInteger(mes) ||
-    mes < 1 ||
-    mes > 12
-  ) {
-    return 'Período no especificado';
-  }
-
-  const meses = [
-    'enero', 'febrero', 'marzo',
-    'abril', 'mayo', 'junio',
-    'julio', 'agosto', 'septiembre',
-    'octubre', 'noviembre', 'diciembre'
+  const columnas = [
+    ...new Set(
+      registros.flatMap(f => Object.keys(f))
+    )
   ];
 
-  return `${meses[mes - 1]} de ${anio}`;
-}
-
-
-function crearMensaje(
-  contenedor,
-  rol,
-  contenido
-) {
-  const articulo = document.createElement('article');
-
-  articulo.className = (
-    rol === 'usuario'
-      ? 'rag-mensaje rag-mensaje-usuario'
-      : 'rag-mensaje rag-mensaje-asistente'
+  const caja = nodo(
+    'div',
+    undefined,
+    'rag-tabla'
   );
 
-  const cabecera = document.createElement('div');
+  caja.tabIndex = 0;
 
-  cabecera.className = 'rag-mensaje-cabecera';
+  caja.setAttribute('role', 'region');
 
-  cabecera.textContent = (
-    rol === 'usuario'
-      ? 'Tú'
-      : 'Asistente financiero'
+  caja.setAttribute(
+    'aria-label',
+    'Resultados recuperados'
   );
 
-  const cuerpo = document.createElement('div');
+  const t = nodo('table');
+  const thead = nodo('thead');
+  const cab = nodo('tr');
 
-  cuerpo.className = 'rag-mensaje-texto';
+  for (const k of columnas) {
 
-  textoSeguro(cuerpo, contenido);
-
-  articulo.append(
-    cabecera,
-    cuerpo
-  );
-
-  contenedor.appendChild(articulo);
-
-  articulo.scrollIntoView({
-    behavior: 'smooth',
-    block: 'nearest'
-  });
-
-  return {
-    articulo,
-    cuerpo
-  };
-}
-
-
-function agregarFuentes(
-  articulo,
-  respuesta
-) {
-  const fuentes = Array.isArray(respuesta.fuentes)
-    ? respuesta.fuentes
-    : [];
-
-  const detalles = document.createElement('div');
-
-  detalles.className = 'rag-fuentes';
-
-  const titulo = document.createElement('strong');
-
-  titulo.textContent = 'Contexto recuperado:';
-
-  detalles.appendChild(titulo);
-
-  if (!fuentes.length) {
-    const texto = document.createElement('span');
-
-    texto.textContent = (
-      'No se informaron fuentes.'
+    const th = nodo(
+      'th',
+      cabeceraCampo(k, evidencia)
     );
 
-    detalles.appendChild(texto);
+    th.scope = 'col';
 
-  } else {
-    for (const fuente of fuentes) {
-      const etiqueta = document.createElement('span');
-
-      etiqueta.className = 'rag-fuente';
-
-      etiqueta.textContent = String(
-        fuente.origen || 'Fuente'
-      );
-
-      detalles.appendChild(etiqueta);
-    }
+    cab.append(th);
   }
+
+  thead.append(cab);
+  t.append(thead);
+
+  const tbody = nodo('tbody');
+
+  for (const fila of registros) {
+
+    const tr = nodo('tr');
+
+    for (const k of columnas) {
+
+      tr.append(
+        nodo(
+          'td',
+          dato(
+            Object.hasOwn(fila, k)
+              ? fila[k]
+              : null
+          )
+        )
+      );
+    }
+
+    tbody.append(tr);
+  }
+
+  t.append(tbody);
+  caja.append(t);
+
+  return caja;
+}
+
+
+function agregarEvidencia(articulo, respuesta) {
+
+  const fuentes = lista(respuesta.fuentes);
+
+  const evidencias = lista(respuesta.evidencia);
+
+  const limitaciones = lista(
+    respuesta.limitaciones
+  );
+
+
+  // Aviso visible incluso con el
+  // desplegable cerrado.
+
+  if (
+    evidencias.some(
+      e => e.truncado === true
+    )
+  ) {
+
+    articulo.append(
+
+      nodo(
+        'p',
+        'Resultados parciales: hay listados limitados.',
+        'rag-alerta'
+      )
+    );
+  }
+
+
+  const detalles = desplegable(
+    'Fuentes y evidencia'
+  );
+
+  detalles.append(
+
+    nodo(
+      'p',
+
+      fuentes.length
+
+        ? fuentes.map(
+            f => dato(f.origen)
+          ).join(' · ')
+
+        : 'No se consultaron fuentes financieras.'
+    )
+  );
+
+
+  for (const e of evidencias) {
+
+    const bloque = desplegable(
+
+      `[${dato(e.referencia)}] ` +
+      `${etiqueta(e.entidad)} · ` +
+      `${etiqueta(e.operacion)}`
+    );
+
+
+    if (e.campo_agregado) {
+
+      bloque.append(
+        nodo(
+          'p',
+          'Campo: ' + etiqueta(e.campo_agregado)
+        )
+      );
+    }
+
+
+    for (const f of lista(e.filtros)) {
+
+      bloque.append(
+
+        nodo(
+          'p',
+
+          `${etiqueta(f.campo)} ` +
+          `${etiqueta(f.operador)}` +
+          (
+            f.valor == null
+              ? ''
+              : ' ' + dato(f.valor)
+          )
+        )
+      );
+    }
+
+
+    if (lista(e.agrupar_por).length) {
+
+      bloque.append(
+
+        nodo(
+          'p',
+
+          'Agrupado por: ' +
+
+          e.agrupar_por.map(etiqueta).join(', ')
+        )
+      );
+    }
+
+
+    bloque.append(
+      nodo('p', 'Fuente: ' + dato(e.origen))
+    );
+
+
+    if (e.fecha_instantanea) {
+
+      bloque.append(
+        nodo(
+          'p',
+          'Instantánea RDF: ' +
+          dato(e.fecha_instantanea)
+        )
+      );
+    }
+
+
+    if (e.vigencia_rdf) {
+
+      bloque.append(
+        nodo(
+          'p',
+          'Vigencia RDF: ' +
+          dato(e.vigencia_rdf)
+        )
+      );
+    }
+
+
+    bloque.append(tabla(e.filas, e));
+
+
+    if (e.truncado === true) {
+
+      bloque.append(
+
+        nodo(
+          'p',
+
+          `Listado limitado a ${dato(e.limite)} filas.`,
+
+          'rag-alerta'
+        )
+      );
+    }
+
+
+    bloque.append(jsonTecnico(e));
+
+    detalles.append(bloque);
+  }
+
+
+  for (const l of limitaciones) {
+
+    detalles.append(
+      nodo('p', dato(l))
+    );
+  }
+
 
   if (respuesta.modelo) {
-    const modelo = document.createElement('span');
 
-    modelo.className = 'rag-modelo';
-
-    modelo.textContent = (
-      'Modelo: ' + respuesta.modelo
+    detalles.append(
+      nodo(
+        'p',
+        'Modelo: ' + dato(respuesta.modelo)
+      )
     );
-
-    detalles.appendChild(modelo);
   }
 
-  if (respuesta.periodo) {
-    const periodo = document.createElement('span');
 
-    periodo.className = 'rag-modelo';
+  detalles.append(
 
-    periodo.textContent = (
-      'Período: ' +
-      periodoTexto(respuesta.periodo)
-    );
+    nodo(
+      'p',
 
-    detalles.appendChild(periodo);
-  }
-
-  const nota = document.createElement('p');
-
-  nota.className = 'rag-fuente-nota';
-
-  nota.textContent = (
-    'Estas son las fuentes entregadas al motor RAG. ' +
-    'No significa que cada frase de la respuesta ' +
-    'utilice ambas fuentes.'
+      'Las fuentes corresponden a la evidencia ' +
+      'entregada al asistente, no verifican cada afirmación.'
+    )
   );
 
-  detalles.appendChild(nota);
-
-  articulo.appendChild(detalles);
-
-  const evidencia = Array.isArray(respuesta.evidencia)
-    ? respuesta.evidencia : [];
-
-  for (const dato of evidencia) {
-    articulo.appendChild(detallesJSON(
-      'Ver evidencia [' + String(dato.referencia || '?') + '] · ' +
-      String(dato.origen || 'Fuente'), dato
-    ));
-  }
-
-  agregarLimitaciones(articulo, respuesta.limitaciones);
+  articulo.append(detalles);
 }
 
 
-function detallesJSON(titulo, datos) {
-  const detalles = document.createElement('details');
-  detalles.className = 'rag-detalles';
-  const resumen = document.createElement('summary');
-  resumen.textContent = titulo;
-  const codigo = document.createElement('pre');
-  codigo.textContent = JSON.stringify(datos, null, 2);
-  detalles.append(resumen, codigo);
-  return detalles;
-}
+// ======================================
+// DIAGNOSTICO SIN IA
+// ======================================
 
-function agregarLimitaciones(contenedor, limitaciones) {
-  if (!Array.isArray(limitaciones) || !limitaciones.length) return;
-  const aviso = document.createElement('p');
-  aviso.className = 'rag-contexto-fecha';
-  aviso.textContent = 'Limitaciones: ' + limitaciones.join(' · ');
-  contenedor.appendChild(aviso);
-}
+function diagnostico(panel, contexto) {
 
-function mostrarEvidencia(contenedor, contexto) {
-  contenedor.replaceChildren();
-  const titulo = document.createElement('h3');
-  titulo.textContent = 'Diagnóstico de fuentes sin IA';
-  const alcance = document.createElement('p');
-  alcance.textContent = contexto.alcance ||
-    'Diagnóstico general: no interpreta la pregunta escrita.';
-  const lista = document.createElement('ul');
+  panel.replaceChildren(
+    nodo('h3', 'Estado de las fuentes')
+  );
+
   const conteos = contexto.postgresql?.conteos || {};
-  const etiquetas = {
-    cuentas: 'Cuentas financieras', movimientos: 'Movimientos',
-    transferencias: 'Transferencias', obligaciones: 'Obligaciones',
-    metas: 'Metas', presupuestos: 'Presupuestos',
-    reservas: 'Relaciones de reservas', categorias: 'Categorías'
-  };
 
-  for (const [campo, cantidad] of Object.entries(conteos)) {
-    const elemento = document.createElement('li');
-    elemento.textContent = `${etiquetas[campo] || campo}: ${cantidad ?? 'No disponible'}`;
-    lista.appendChild(elemento);
-  }
+  panel.append(
+
+    tabla(
+
+      Object.entries(conteos).map(
+        ([k, v]) => ({
+          entidad: etiqueta(k),
+          cantidad: v
+        })
+      )
+    )
+  );
+
 
   const rdf = contexto.fuseki || {};
-  const fecha = document.createElement('p');
-  fecha.className = 'rag-contexto-fecha';
-  fecha.textContent = 'Última instantánea RDF: ' +
-    (rdf.fecha_instantanea || 'No disponible') +
-    ' · Vigencia: ' + (rdf.vigencia || 'No disponible');
 
-  contenedor.append(titulo, alcance, lista, fecha,
-    detallesJSON('Ver diagnóstico completo', contexto));
+  panel.append(
+    nodo('p', 'Fuseki: ' + dato(rdf.vigencia))
+  );
 
-  agregarLimitaciones(contenedor, contexto.limitaciones);
+  panel.append(
+    nodo(
+      'p',
+      'Instantánea: ' + dato(rdf.fecha_instantanea)
+    )
+  );
 
-  contenedor.hidden = false;
-  contenedor.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  for (const l of lista(contexto.limitaciones)) {
+
+    panel.append(nodo('p', dato(l)));
+  }
+
+  panel.append(jsonTecnico(contexto));
 }
 
-/**
- * Vista principal del asistente.
- *
- * Las conversaciones se mantienen únicamente
- * en la pantalla actual. No se almacenan
- * en localStorage ni IndexedDB.
- */
+
+// ======================================
+// MENSAJES DE LA CONSULTA
+// ======================================
+
+function mensaje(chat, rol, texto) {
+
+  const art = nodo(
+
+    'article',
+
+    undefined,
+
+    'rag-mensaje ' +
+
+    (
+      rol === 'usuario'
+        ? 'rag-usuario'
+        : 'rag-respuesta'
+    )
+  );
+
+  art.append(
+
+    nodo(
+      'div',
+
+      rol === 'usuario'
+        ? 'Tú'
+        : 'Asistente',
+
+      'rag-autor'
+    )
+  );
+
+  const cuerpo = nodo(
+    'div',
+    undefined,
+    'rag-texto'
+  );
+
+  textoSeguro(cuerpo, texto);
+
+  art.append(cuerpo);
+  chat.append(art);
+
+  return { art, cuerpo };
+}
+
+
+// ======================================
+// PANTALLA PRINCIPAL
+// ======================================
+
 export async function render(c) {
-  const usuarioInicial = Number(
+
+  const token = obtenerToken();
+
+  const uid = Number(
     obtenerUsuario()?.id_usuario
   );
 
-  const tokenInicial = obtenerToken();
+
+  const vigente = () => (
+
+    c.isConnected &&
+
+    location.hash === '#/asistente' &&
+
+    !!token &&
+
+    obtenerToken() === token &&
+
+    uid > 0 &&
+
+    Number(
+      obtenerUsuario()?.id_usuario
+    ) === uid
+  );
+
+
   let ocupada = false;
   let controlador = null;
 
+
   c.innerHTML = `
+
     <style>
+
       .rag-contenido {
-        padding: 18px 16px 30px;
-        display: flex;
-        flex-direction: column;
+        display: grid;
         gap: 16px;
+        padding: 18px 16px 28px;
+        min-width: 0;
       }
 
-      .rag-descripcion {
-        background: var(--marca-suave);
-        border-radius: 18px;
-        padding: 14px;
-        font-size: 13px;
-        line-height: 1.6;
-        color: var(--marca-oscuro);
+      .rag-linea {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
       }
 
-      .rag-descripcion strong {
-        display: block;
-        font-size: 14px;
-        margin-bottom: 4px;
+      .rag-linea h2 {
+        font-size: 15px;
       }
 
-      .rag-titulo-seccion {
-        font-size: 14px;
-        font-weight: 800;
-        color: var(--tinta);
+      .rag-contenido .enlace {
+        background: none;
+        border: 0;
+        color: var(--marca);
+        font-weight: 700;
+        padding: 8px 0;
+        min-height: 44px;
       }
 
       .rag-sugerencias {
         display: flex;
-        gap: 8px;
         flex-wrap: wrap;
+        gap: 8px;
       }
 
       .rag-sugerencias button {
         border: 1px solid var(--linea);
         background: var(--gris);
         color: var(--tinta);
+        border-radius: 999px;
+        padding: 8px 12px;
+        min-height: 40px;
         font-size: 12px;
         font-weight: 700;
-        border-radius: 14px;
-        padding: 10px 12px;
-        line-height: 1.4;
-        text-align: left;
       }
 
-      .rag-sugerencias button:hover {
-        border-color: var(--marca);
-        background: var(--marca-suave);
-      }
-
-      .rag-chat-cabecera {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
+      .rag-chat {
+        display: grid;
         gap: 10px;
-      }
-
-      .rag-nuevo {
-        border: 0;
-        background: transparent;
-        color: var(--marca);
-        font-size: 12px;
-        font-weight: 800;
-        padding: 6px;
-      }
-
-      .rag-conversacion {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        min-height: 110px;
-      }
-
-      .rag-mensaje {
-        border-radius: 18px;
-        padding: 14px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        max-width: 96%;
         min-width: 0;
       }
 
-      .rag-mensaje-usuario {
-        align-self: flex-end;
-        background: var(--marca-oscuro);
-        color: #fff;
-        max-width: 88%;
-        border-bottom-right-radius: 6px;
-      }
-
-      .rag-mensaje-asistente {
-        align-self: flex-start;
-        background: var(--gris);
-        color: var(--tinta);
-        border-bottom-left-radius: 6px;
-      }
-
-      .rag-mensaje-cabecera {
-        font-size: 11px;
-        font-weight: 800;
-        opacity: 0.8;
-      }
-
-      .rag-mensaje-texto {
-        font-size: 13px;
-        line-height: 1.7;
-        white-space: pre-wrap;
+      .rag-mensaje {
+        min-width: 0;
+        max-width: 100%;
+        padding: 14px;
+        border-radius: 18px;
+        display: grid;
+        gap: 8px;
         overflow-wrap: anywhere;
       }
 
-      .rag-mensaje-texto strong {
-        font-weight: 800;
+      .rag-usuario {
+        background: var(--marca-oscuro);
+        color: white;
+        justify-self: end;
+        max-width: 88%;
       }
 
-      .rag-fuentes {
-        border-top: 1px solid var(--linea);
-        padding-top: 10px;
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 6px;
-        font-size: 11px;
-      }
-
-      .rag-fuentes > strong {
-        width: 100%;
-      }
-
-      .rag-fuente {
-        display: inline-flex;
-        border-radius: 999px;
-        padding: 5px 8px;
-        background: #fff;
-        border: 1px solid var(--linea);
-        color: var(--marca-oscuro);
-        font-weight: 800;
-      }
-
-      .rag-modelo {
-        color: var(--tenue);
-        font-weight: 700;
-      }
-
-      .rag-fuente-nota {
-        width: 100%;
-        color: var(--tenue);
-        line-height: 1.5;
-      }
-
-      .rag-formulario {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        background: #fff;
-        border: 1px solid var(--linea);
-        border-radius: 20px;
-        padding: 14px;
-      }
-
-      .rag-formulario label {
-        font-size: 13px;
-        font-weight: 800;
-      }
-
-      .rag-pregunta {
-        width: 100%;
-        min-height: 110px;
-        max-height: 230px;
-        resize: vertical;
-        padding: 12px;
-        border-radius: 14px;
-        border: 1px solid var(--linea);
+      .rag-respuesta {
         background: var(--gris);
         color: var(--tinta);
-        font: inherit;
+      }
+
+      .rag-autor {
+        font-size: 11px;
+        font-weight: 700;
+        opacity: .85;
+      }
+
+      .rag-texto {
         font-size: 14px;
+        line-height: 1.6;
+        white-space: pre-wrap;
+      }
+
+      .rag-form {
+        display: grid;
+        gap: 10px;
+        min-width: 0;
+      }
+
+      .rag-form textarea {
+        width: 100%;
+        min-height: 100px;
+        resize: vertical;
+        padding: 12px;
+        border: 1px solid var(--linea);
+        border-radius: 14px;
+        font: inherit;
+        font-size: 16px;
+        color: var(--tinta);
+      }
+
+      .rag-consentimiento {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        font-size: 13px;
         line-height: 1.5;
       }
 
-      .rag-pregunta:focus {
-        outline: 2px solid var(--marca);
-        outline-offset: 2px;
+      .rag-consentimiento input {
+        flex: none;
+        width: 20px;
+        height: 20px;
+        accent-color: var(--marca);
+      }
+
+      .rag-nota,
+      .rag-detalle p {
+        font-size: 12px;
+        color: var(--tenue);
+        line-height: 1.5;
       }
 
       .rag-contador {
         text-align: right;
-        font-size: 11px;
+        font-size: 12px;
         color: var(--tenue);
       }
 
-      .rag-autorizacion {
-        background: var(--oro-suave);
-        border-radius: 14px;
-        padding: 12px;
-        display: flex;
-        align-items: flex-start;
-        gap: 10px;
-        cursor: pointer;
+      .rag-estado:empty,
+      .rag-error:empty,
+      .rag-chat:empty {
+        display: none;
       }
 
-      .rag-autorizacion input {
-        width: 20px;
-        min-width: 20px;
-        height: 20px;
-        min-height: 20px;
-        margin: 1px 0 0;
-        padding: 0;
-        accent-color: var(--marca);
-      }
-
-      .rag-autorizacion span {
-        font-size: 12px;
-        font-weight: 600;
-        line-height: 1.6;
-      }
-
-      .rag-acciones {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-      }
-
-      .rag-acciones button {
-        min-height: 46px;
-        border-radius: 14px;
-        padding: 10px;
-        font-size: 12px;
-        line-height: 1.4;
-        font-weight: 800;
-      }
-
-      .rag-solo-contexto {
-        color: var(--marca-oscuro);
-        background: var(--marca-suave);
-        border: 1px solid var(--linea);
-      }
-
-      .rag-enviar {
-        background: var(--marca);
-        color: #fff;
-        border: 0;
-      }
-
-      .rag-acciones button:disabled {
-        opacity: 0.5;
-      }
-
-      .rag-error {
+      .rag-error,
+      .rag-alerta {
         color: var(--gasto);
-        font-weight: 700;
         font-size: 13px;
-        line-height: 1.5;
-      }
-
-      .rag-error:empty {
-        display: none;
-      }
-
-      .rag-estado {
-        color: var(--tenue);
-        font-size: 12px;
         font-weight: 700;
       }
 
-      .rag-estado:empty {
-        display: none;
+      .rag-detalle {
+        min-width: 0;
+        border-top: 1px solid var(--linea);
+        padding-top: 8px;
+        font-size: 13px;
+        overflow-wrap: anywhere;
       }
 
-      .rag-panel-contexto {
-        border: 1px solid var(--linea);
-        border-radius: 18px;
-        background: var(--gris);
-        padding: 14px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        font-size: 12px;
-        line-height: 1.6;
-      }
-
-      .rag-panel-contexto h3 {
-        margin: 0;
-        font-size: 14px;
-      }
-
-      .rag-panel-contexto ul {
-        margin: 0;
-        padding-left: 18px;
-      }
-
-      .rag-contexto-fecha {
-        font-size: 11px;
-        color: var(--tenue);
-      }
-
-      .rag-detalles summary {
+      .rag-detalle summary {
         cursor: pointer;
-        font-weight: 800;
-        color: var(--marca);
+        font-weight: 700;
+        padding: 8px 0;
       }
 
-      .rag-detalles pre {
+      .rag-detalle p {
+        margin: 6px 0;
+      }
+
+      .rag-detalle pre {
         white-space: pre-wrap;
         overflow-wrap: anywhere;
-        background: #fff;
-        border: 1px solid var(--linea);
-        border-radius: 12px;
-        padding: 10px;
-        margin: 8px 0 0;
         font-size: 11px;
-        max-height: 340px;
-        overflow-y: auto;
+        background: var(--fondo);
+        padding: 8px;
       }
 
-      .rag-nota-final {
-        border-top: 1px solid var(--linea);
-        padding-top: 12px;
-        font-size: 11px;
-        color: var(--tenue);
-        line-height: 1.6;
+      .rag-tabla {
+        max-width: 100%;
+        overflow-x: auto;
+        margin: 8px 0;
       }
 
-      .rag-panel-contexto[hidden] {
-        display: none;
+      .rag-tabla table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 12px;
       }
 
-      @media (max-width: 360px) {
-        .rag-acciones {
-          grid-template-columns: 1fr;
-        }
+      .rag-tabla th,
+      .rag-tabla td {
+        text-align: left;
+        padding: 8px;
+        border-bottom: 1px solid var(--linea);
+        vertical-align: top;
+        overflow-wrap: anywhere;
       }
+
+      .rag-tabla th {
+        background: var(--marca-suave);
+        color: var(--marca-oscuro);
+      }
+
+      .rag-panel h3 {
+        font-size: 14px;
+        margin: 10px 0;
+      }
+
+      .rag-acciones .btn {
+        width: 100%;
+      }
+
     </style>
 
+
     ${banda('Asistente financiero', {
-    subtitulo:
-      'Inteligencia artificial con PostgreSQL, Fuseki y RAG'
-  })}
+      subtitulo: 'Consulta tus finanzas.'
+    })}
+
 
     <section class="rag-contenido">
-      <div class="rag-descripcion">
-        <strong>Consulta tus finanzas con IA</strong>
-        Puedo ayudarte a comprender tus gastos,
-        saldos disponibles, presupuestos y metas.
-        No realizo operaciones con tu dinero.
-      </div>
 
-      <div>
-        <h2 class="rag-titulo-seccion">
-          Preguntas sugeridas
-        </h2>
-      </div>
+      <div class="rag-linea">
 
-      <div
-        id="rag-sugerencias"
-        class="rag-sugerencias"
-      ></div>
-
-      <div class="rag-chat-cabecera">
-        <h2 class="rag-titulo-seccion">
-          Conversación
-        </h2>
+        <h2>Consultas sugeridas</h2>
 
         <button
-          type="button"
-          class="rag-nuevo"
           id="rag-nuevo"
+          type="button"
+          class="enlace"
         >
-          Nueva conversación
+          Nueva consulta
         </button>
+
       </div>
 
+
       <div
-        id="rag-conversacion"
-        class="rag-conversacion"
-        role="log"
-        aria-label="Conversación con el asistente"
-        aria-live="polite"
-        aria-relevant="additions text"
+        class="rag-sugerencias"
+        id="rag-sugerencias"
       ></div>
 
+
+      <div
+        id="rag-chat"
+        class="rag-chat"
+        role="log"
+        aria-label="Consultas y respuestas"
+        aria-live="polite"
+      ></div>
+
+
       <form
-        id="rag-formulario"
-        class="rag-formulario"
-        novalidate
+        id="rag-form"
+        class="rag-form"
       >
+
         <label for="rag-pregunta">
-          Escribe tu pregunta financiera
+          ¿Qué quieres saber?
         </label>
 
         <textarea
           id="rag-pregunta"
-          class="rag-pregunta"
           maxlength="400"
-          placeholder="Por ejemplo: ¿Cuánto pagué de GMF este mes?"
+          minlength="5"
           required
+          placeholder="Escribe tu pregunta…"
         ></textarea>
+
 
         <div
           id="rag-contador"
           class="rag-contador"
         >
-          0 / 400 caracteres
+          0 / 400
         </div>
 
-        <label class="rag-autorizacion">
+
+        <label class="rag-consentimiento">
+
           <input
-            id="rag-consentimiento"
             type="checkbox"
+            id="rag-consentimiento"
           >
 
           <span>
-            Autorizo enviar esta pregunta y su
-            contexto financiero recuperado a Google
-            Gemini para generar una respuesta.
-            Entiendo que es un servicio externo.
+            Autorizo enviar mi pregunta y los
+            datos financieros recuperados a
+            Google Gemini, un servicio externo.
           </span>
+
         </label>
 
-        <div class="rag-acciones">
-          <button
-            type="button"
-            class="rag-solo-contexto"
-            id="rag-ver-contexto"
-            disabled
-          >
-            Diagnóstico sin IA
-          </button>
 
-          <button
-            type="submit"
-            class="rag-enviar"
-            id="rag-enviar"
-            disabled
-          >
-            Preguntar a Gemini
-          </button>
-        </div>
+        <button
+          type="submit"
+          id="rag-enviar"
+          class="btn btn-primario"
+          disabled
+        >
+          Consultar
+        </button>
+
 
         <p
           id="rag-estado"
-          class="rag-estado"
+          class="rag-nota rag-estado"
           role="status"
-          aria-live="polite"
         ></p>
+
 
         <p
           id="rag-error"
           class="rag-error"
           role="alert"
         ></p>
+
       </form>
 
-      <section
-        id="rag-panel-contexto"
-        class="rag-panel-contexto"
-        aria-label="Evidencia recuperada"
-        hidden
-      ></section>
 
-      <p class="rag-nota-final">
-        Cada pregunta se analiza por separado.
-        Esta pantalla no guarda conversaciones en
-        el dispositivo. Las respuestas de IA pueden
-        contener errores: verifica los cálculos
-        importantes con tus saldos de la PWA.
-        Los datos offline pendientes de sincronizar
-        no se incluyen en el análisis.
+      <p class="rag-nota">
+        La IA puede cometer errores.
+        No incluye movimientos pendientes de sincronizar.
+        Cada consulta es independiente.
       </p>
-    </section>
-  `;
-
-  const form = c.querySelector('#rag-formulario');
-  const pregunta = c.querySelector('#rag-pregunta');
-  const consentimiento = c.querySelector(
-    '#rag-consentimiento'
-  );
-
-  const enviar = c.querySelector('#rag-enviar');
-  const verContexto = c.querySelector(
-    '#rag-ver-contexto'
-  );
-
-  const conversacion = c.querySelector(
-    '#rag-conversacion'
-  );
-
-  const panelContexto = c.querySelector(
-    '#rag-panel-contexto'
-  );
-
-  const error = c.querySelector('#rag-error');
-  const estado = c.querySelector('#rag-estado');
-  const contador = c.querySelector('#rag-contador');
-
-  const nuevo = c.querySelector('#rag-nuevo');
-  const sugerencias = c.querySelector(
-    '#rag-sugerencias'
-  );
-
-  const sesionVigente = () => (
-    c.isConnected &&
-    tokenInicial !== null &&
-    obtenerToken() === tokenInicial &&
-    usuarioInicial > 0 &&
-    Number(obtenerUsuario()?.id_usuario) ===
-    usuarioInicial
-  );
 
 
-  // ------------------------------------
-  // INICIAR CONVERSACIÓN
-  // ------------------------------------
+      <details class="rag-detalle">
 
-  function bienvenida() {
-    conversacion.replaceChildren();
+        <summary>Información técnica</summary>
 
-    crearMensaje(
-      conversacion,
-      'asistente',
-      (
-        '¡Hola! Puedo analizar la información ' +
-        'financiera que recuperamos de tus cuentas. ' +
-        '\n\n' +
-        'Selecciona una pregunta sugerida o ' +
-        'escribe la tuya para comenzar.'
-      )
+        <p>
+          Diagnóstico de PostgreSQL y Fuseki.
+          No interpreta preguntas ni utiliza Gemini.
+        </p>
+
+        <button
+          id="rag-diagnostico"
+          type="button"
+          class="btn btn-secundario"
+        >
+          Diagnóstico sin IA
+        </button>
+
+        <section
+          id="rag-panel"
+          class="rag-panel"
+          aria-live="polite"
+        ></section>
+
+      </details>
+
+    </section>`;
+
+
+  const $ = id => c.querySelector('#rag-' + id);
+
+  const pregunta = $('pregunta');
+  const consentimiento = $('consentimiento');
+
+  const chat = $('chat');
+  const enviar = $('enviar');
+  const diag = $('diagnostico');
+
+  const estado = $('estado');
+  const error = $('error');
+  const panel = $('panel');
+
+  const sugerencias = $('sugerencias');
+  const nuevo = $('nuevo');
+
+
+  // ======================================
+  // CONTROLES
+  // ======================================
+
+  function actualizar() {
+
+    $('contador').textContent =
+      `${pregunta.value.length} / 400`;
+
+    pregunta.disabled =
+      consentimiento.disabled =
+      nuevo.disabled =
+      ocupada;
+
+    diag.disabled = ocupada;
+
+    enviar.disabled = (
+
+      ocupada ||
+
+      !consentimiento.checked ||
+
+      pregunta.value.trim().length < 5 ||
+
+      pregunta.value.length > 400
     );
+
+
+    for (
+      const b of sugerencias.querySelectorAll(
+        'button'
+      )
+    ) {
+
+      b.disabled = ocupada;
+    }
   }
 
-  bienvenida();
 
+  for (const [titulo, texto] of SUGERENCIAS) {
 
-  // ------------------------------------
-  // SUGERENCIAS
-  // ------------------------------------
+    const b = nodo('button', titulo);
 
-  for (const texto of SUGERENCIAS) {
-    const boton = document.createElement('button');
+    b.type = 'button';
 
-    boton.type = 'button';
-    boton.textContent = texto;
-
-    boton.addEventListener('click', () => {
-      if (ocupada) return;
+    b.addEventListener('click', () => {
 
       pregunta.value = texto;
 
-      actualizarControles();
+      consentimiento.checked = false;
+
+      error.textContent = '';
+
+      actualizar();
 
       pregunta.focus();
     });
 
-    sugerencias.appendChild(boton);
+    sugerencias.append(b);
   }
 
 
-  // ------------------------------------
-  // CONTROLES DE FORMULARIO
-  // ------------------------------------
+  pregunta.addEventListener('input', () => {
 
-  function actualizarControles() {
-    const cantidad = pregunta.value.length;
+    consentimiento.checked = false;
 
-    contador.textContent = (
-      `${cantidad} / 400 caracteres`
-    );
+    error.textContent = '';
 
-    const valida = (
-      pregunta.value.trim().length >= 5 &&
-      cantidad <= 400
-    );
+    actualizar();
+  });
 
-    pregunta.disabled = ocupada;
-    consentimiento.disabled = ocupada;
-
-    verContexto.disabled = (
-      ocupada || !valida
-    );
-
-    enviar.disabled = (
-      ocupada ||
-      !valida ||
-      !consentimiento.checked
-    );
-
-    nuevo.disabled = ocupada;
-
-    sugerencias.querySelectorAll('button')
-      .forEach(boton => {
-        boton.disabled = ocupada;
-      });
-  }
-
-
-  pregunta.addEventListener(
-    'input',
-    () => {
-      error.textContent = '';
-
-      actualizarControles();
-    }
-  );
 
   consentimiento.addEventListener(
     'change',
-    () => {
-      error.textContent = '';
-
-      actualizarControles();
-    }
+    actualizar
   );
 
 
-  // ------------------------------------
-  // CONSULTAR RAG
-  // ------------------------------------
+  nuevo.addEventListener('click', () => {
+
+    chat.replaceChildren();
+    panel.replaceChildren();
+
+    pregunta.value = '';
+
+    consentimiento.checked = false;
+
+    estado.textContent =
+      error.textContent = '';
+
+    actualizar();
+
+    pregunta.focus();
+  });
+
+
+  // Cancelar la solicitud local si
+  // se abandona la pantalla.
+
+  const observador = new MutationObserver(() => {
+
+    if (!c.isConnected) {
+
+      controlador?.abort();
+
+      observador.disconnect();
+    }
+  });
+
+  observador.observe(
+    c.parentNode,
+    { childList: true }
+  );
+
+
+  // ======================================
+  // CONSULTAR
+  // ======================================
 
   async function consultar(modo) {
-    if (ocupada || !sesionVigente()) return;
+
+    if (ocupada || !vigente()) return;
+
+    const ia = modo === 'ia';
 
     const texto = pregunta.value.trim();
 
+
     if (
-      texto.length < 5 ||
-      texto.length > 400
+      ia &&
+      (
+        texto.length < 5 ||
+
+        texto.length > 400 ||
+
+        !consentimiento.checked
+      )
     ) {
-      error.textContent = (
-        'Escribe una pregunta de 5 a 400 caracteres.'
-      );
 
       return;
     }
 
-    const conIA = modo === 'ia';
 
-    if (
-      conIA &&
-      !consentimiento.checked
-    ) {
-      error.textContent = (
-        'Debes autorizar el envío a Gemini ' +
-        'para generar una respuesta.'
-      );
-
-      return;
-    }
-
-    panelContexto.hidden = true;
-    panelContexto.replaceChildren();
     error.textContent = '';
-    estado.textContent = (
-      conIA
-        ? 'Recuperando información y consultando Gemini…'
-        : 'Comprobando las fuentes de datos…'
-    );
+
+
+    if (!navigator.onLine) {
+
+      error.textContent =
+        'Necesitas conexión a internet.';
+
+      return;
+    }
+
 
     ocupada = true;
+
     controlador = new AbortController();
 
-    actualizarControles();
+    actualizar();
 
-    let mensajePendiente = null;
+    estado.textContent = ia
 
-    if (conIA) {
-      crearMensaje(
-        conversacion,
-        'usuario',
-        texto
-      );
+      ? 'Consultando…'
 
-      mensajePendiente = crearMensaje(
-        conversacion,
-        'asistente',
-        'Consultando tus datos financieros…'
-      );
-    }
+      : 'Comprobando fuentes…';
+
+
+    let pendiente = null;
+
 
     try {
-      if (!navigator.onLine) {
-        throw new ErrorDeRed(
-          'No tienes conexión. El asistente ' +
-          'solo puede responder cuando el ' +
-          'backend y Fuseki están disponibles.'
+
+      if (ia) {
+
+        mensaje(
+          chat,
+          'usuario',
+          texto
         );
-      }
 
-      if (conIA) {
+        pendiente = mensaje(
+          chat,
+          'asistente',
+          'Consultando…'
+        );
 
-        const respuesta = await preguntarRAG(
+
+        const r = await preguntarRAG(
+
           texto,
+
           {
-            autorizoEnvioIA: consentimiento.checked,
+            autorizoEnvioIA: true,
+
             signal: controlador.signal
           }
         );
 
 
-        if (!sesionVigente()) return;
+        if (!vigente()) return;
+
 
         if (
-          typeof respuesta.respuesta !== 'string' ||
-          !respuesta.respuesta.trim()
+          typeof r.respuesta !== 'string' ||
+
+          !r.respuesta.trim()
         ) {
-          throw new Error(
-            'El servidor no devolvió texto del asistente.'
-          );
+
+          throw new Error('Respuesta vacía');
         }
 
+
         textoSeguro(
-          mensajePendiente.cuerpo,
-          respuesta.respuesta
+          pendiente.cuerpo,
+          r.respuesta
         );
 
-        agregarFuentes(
-          mensajePendiente.articulo,
-          respuesta
+        agregarEvidencia(
+          pendiente.art,
+          r
         );
 
-        // No conservamos la autorización para
-        // preguntas futuras.
-        consentimiento.checked = false;
+
         pregunta.value = '';
 
-        estado.textContent = (
-          'Respuesta generada. ' +
-          'Puedes realizar otra pregunta.'
-        );
+        pendiente.art.scrollIntoView({
+          block: 'nearest'
+        });
 
       } else {
-        const contexto = await consultarContextoRAG(
-          texto,
+
+        panel.replaceChildren(
+          nodo('p', 'Comprobando fuentes…')
+        );
+
+
+        const r = await consultarContextoRAG(
+
+          'Diagnóstico general de fuentes',
+
           {
             signal: controlador.signal
           }
         );
 
-        if (!sesionVigente()) return;
 
-        mostrarEvidencia(
-          panelContexto,
-          contexto
-        );
+        if (!vigente()) return;
 
-        estado.textContent = (
-          'Diagnóstico completado sin llamar a Gemini.'
-        );
+        diagnostico(panel, r);
       }
 
-    } catch (excepcion) {
-      if (!sesionVigente()) return;
+    } catch (e) {
 
-      if (mensajePendiente) {
-        mensajePendiente.articulo.remove();
+      if (vigente()) {
+
+        pendiente?.art.remove();
+
+        error.textContent =
+          errorVisible(e, modo);
+
+
+        if (!ia) {
+
+          panel.replaceChildren(
+
+            nodo(
+              'p',
+              errorVisible(e, modo),
+              'rag-alerta'
+            )
+          );
+        }
       }
-
-      error.textContent = textoError(
-        excepcion
-      );
-
-      estado.textContent = '';
 
     } finally {
-      ocupada = false;
+
       controlador = null;
 
-      if (sesionVigente()) {
-        // Después de cada intento de generación
-        // se solicita consentimiento nuevamente.
-        if (conIA) {
+      ocupada = false;
+
+
+      if (vigente()) {
+
+        if (ia) {
+
           consentimiento.checked = false;
         }
 
-        actualizarControles();
+        estado.textContent = '';
+
+        actualizar();
       }
     }
   }
 
 
-  form.addEventListener(
-    'submit',
-    async evento => {
-      evento.preventDefault();
+  $('form').addEventListener('submit', ev => {
 
-      await consultar('ia');
-    }
-  );
+    ev.preventDefault();
 
-  verContexto.addEventListener(
-    'click',
-    async () => {
-      await consultar('contexto');
-    }
-  );
+    consultar('ia');
+  });
 
 
-  // ------------------------------------
-  // NUEVA CONVERSACIÓN
-  // ------------------------------------
+  diag.addEventListener('click', () => {
 
-  nuevo.addEventListener(
-    'click',
-    () => {
-      if (ocupada) return;
-
-      pregunta.value = '';
-      consentimiento.checked = false;
-
-      error.textContent = '';
-      estado.textContent = '';
-
-      panelContexto.hidden = true;
-      panelContexto.replaceChildren();
-
-      bienvenida();
-      actualizarControles();
-
-      pregunta.focus();
-    }
-  );
+    consultar('diagnostico');
+  });
 
 
-  // ------------------------------------
-  // ESTADO INICIAL
-  // ------------------------------------
-
-  actualizarControles();
+  actualizar();
 }
