@@ -34,6 +34,9 @@ from app.business.cuenta_service import (
 )
 
 
+from app.routers.password_router import router as password_router
+
+
 router = APIRouter(
     prefix="/auth",
     tags=["Autenticación"],
@@ -104,3 +107,5 @@ def mis_cuentas(
 
         id_usuario=usuario.id_usuario,
     )
+
+router.include_router(password_router)

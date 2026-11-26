@@ -46,6 +46,10 @@ class Usuario(Base):
         nullable=False
     )
 
+    version_sesion: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+
     cuentas: Mapped[list[CuentaFinanciera]] = relationship(
         back_populates="usuario"
     )

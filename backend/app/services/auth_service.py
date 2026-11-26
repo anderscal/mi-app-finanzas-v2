@@ -88,6 +88,7 @@ def verificar_password(
 
 def crear_access_token(
     id_usuario: int,
+    version_sesion: int = 0,
 ) -> str:
 
     if type(id_usuario) is not int or id_usuario <= 0:
@@ -96,10 +97,14 @@ def crear_access_token(
             "Identificador de usuario invalido"
         )
 
+    if type(version_sesion) is not int or version_sesion < 0:
+        raise ValueError("Version de sesion invalida")
+
     ahora = datetime.now(timezone.utc)
 
     payload = {
         "sub": str(id_usuario),
+        "ver": version_sesion,
 
         "iat": ahora,
 
@@ -115,9 +120,9 @@ def crear_access_token(
     )
 
 
-def validar_access_token(
+def validar_sesion_token(
     token: str,
-) -> int:
+) -> tuple[int, int]:
 
     try:
 
@@ -131,6 +136,7 @@ def validar_access_token(
                     "sub",
                     "exp",
                     "iat",
+                    "ver",
                 ],
             },
         )
@@ -151,7 +157,12 @@ def validar_access_token(
                 "Identificador del token invalido"
             )
 
-        return id_usuario
+        version = payload["ver"]
+
+        if type(version) is not int or version < 0:
+            raise TokenInvalido("Version de sesion invalida")
+
+        return id_usuario, version
 
     except (
         InvalidTokenError,
@@ -162,3 +173,7 @@ def validar_access_token(
         raise TokenInvalido(
             "Token invalido o expirado"
         ) from error
+
+def validar_access_token(token: str) -> int:
+
+    return validar_sesion_token(token)[0]

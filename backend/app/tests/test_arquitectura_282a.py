@@ -396,9 +396,9 @@ def test_282a_usuario_inexistente(
     monkeypatch.setattr(
         auth_business,
 
-        "validar_access_token",
+        "validar_sesion_token",
 
-        lambda token: 123,
+        lambda token: (123, 0),
     )
 
     monkeypatch.setattr(

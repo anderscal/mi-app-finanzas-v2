@@ -30,7 +30,7 @@ from app.services.auth_service import (
     generar_hash,
     verificar_password,
     crear_access_token,
-    validar_access_token,
+    validar_sesion_token,
 )
 
 
@@ -151,7 +151,8 @@ def iniciar_sesion(
         )
 
     return crear_access_token(
-        usuario.id_usuario
+        usuario.id_usuario,
+        usuario.version_sesion,
     )
 
 
@@ -162,7 +163,7 @@ def obtener_usuario_actual(
 
     try:
 
-        id_usuario = validar_access_token(
+        id_usuario, version = validar_sesion_token(
             token
         )
 
@@ -179,7 +180,7 @@ def obtener_usuario_actual(
         id_usuario,
     )
 
-    if usuario is None:
+    if usuario is None or usuario.version_sesion != version:
 
         raise ErrorNegocio(
             CodigoError.AUTENTICACION_REQUERIDA,
