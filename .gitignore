@@ -1,0 +1,49 @@
+# Credenciales y configuraciones privadas
+.env
+.env.*
+!.env.example
+!.env.test.example
+
+# Entornos virtuales
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Pruebas y cobertura
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editores
+.vscode/
+.idea/
+
+# JavaScript
+node_modules/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Archivos temporales
+*.log
+*.tmp
+
+# Respaldos y bases locales
+*.dump
+*.backup
+*.bak
+*.sqlite
+*.sqlite3
+respaldos/
+backups/
+datos_tdb2/
+tdb2/
+
+# Archivos comprimidos del proyecto
+*.zip

@@ -1,75 +1,115 @@
-# Frontend · Finanzas Personales (PWA)
+# Frontend — Finanzas Personales PWA
 
-HTML, CSS y JavaScript sin frameworks ni compilación. Se conecta a la API FastAPI de `../backend`.
+Interfaz desarrollada con HTML, CSS y JavaScript
+modular, sin frameworks ni proceso de compilación.
 
-## Cómo correrlo en local
+## Ejecución local
 
-1. Enciende el backend (desde `backend/`):
+Iniciar FastAPI desde backend.
 
-   ```bash
-   python -m uvicorn app.main:app --reload
-   ```
+Desde frontend:
 
-2. CORS ya está configurado en `backend/app/main.py` para `localhost:5500` y `5501`. Al desplegar, agrega ahí la URL del frontend en Render.
+```powershell
+python -m http.server 5500
+```
 
-3. Sirve esta carpeta (desde `frontend/`):
+Abrir:
 
-   ```bash
-   python -m http.server 5500
-   ```
+http://127.0.0.1:5500
 
-4. Abre <http://localhost:5500>. Regístrate o inicia sesión.
+La dirección de la API se configura en js/config.js.
 
-La URL del backend se cambia en `js/config.js` (`API_URL`).
+Los orígenes autorizados se configuran mediante
+CORS_ORIGINS en el backend.
 
-## Estructura
+## Componentes
 
-| Archivo | Qué hace |
+| Archivo | Responsabilidad |
 |---|---|
-| `js/config.js` | URL del backend y categorías temporales |
-| `js/api.js` | Una función por endpoint. Si cambia el backend, se ajusta aquí |
-| `js/sesion.js` | Token JWT: guardar, leer, detectar vencimiento (30 min) |
-| `js/offline.js` | Capa del modo sin conexión que usan las pantallas |
-| `js/offline-db.js`, `js/sync.js` | Cola en IndexedDB y sincronización (copiados de `backend/JS/`) |
-| `js/app.js` | Rutas (`#/inicio`, `#/registrar`…), barra inferior, eventos online/offline |
-| `js/vistas/*.js` | Una pantalla por archivo |
-| `sw.js` | Service Worker: la app abre sin internet |
-| `css/estilos.css` | Identidad verde esmeralda + dorado de los mockups |
+| js/app.js | Navegación y rutas |
+| js/api.js | Comunicación con FastAPI |
+| js/config.js | Configuración de la API |
+| js/sesion.js | Gestión de sesión |
+| js/offline-db.js | Persistencia en IndexedDB |
+| js/offline.js | Operaciones sin conexión |
+| js/sync.js | Sincronización de operaciones |
+| js/rag-api.js | Comunicación con el asistente |
+| js/vistas/ | Pantallas de la aplicación |
+| js/vistas/password.js | Recuperación y cambio de contraseña |
+| js/vistas/asistente.js | Consultas y evidencia financiera |
+| css/estilos.css | Identidad visual |
+| sw.js | Caché estática de la PWA |
+| manifest.webmanifest | Instalación de la PWA |
 
-## Endpoints que usa
+## Diseño
 
-Todos piden token, salvo registro y login.
+Identidad visual verde esmeralda y dorado.
 
-| Pantalla | Endpoint |
-|---|---|
-| Registro | `POST /auth/registro` (JSON) |
-| Login | `POST /auth/login` (formulario, el correo va en `username`) |
-| Perfil | `GET /auth/me` |
-| Inicio: saldo y cuentas | `GET /auth/mis-cuentas` |
-| Inicio: resumen del mes | `GET /consultas/resumen-mensual` |
-| Inicio y Movimientos: historial | `GET /consultas/historial-mensual` |
-| Deudas y Metas | `GET /consultas/planificacion` |
-| Registrar movimiento | `POST /movimientos/normales` |
-| Transferir entre cuentas (con GMF) | `POST /transferencias/` (con barra final) |
-| Registrar pago o cobro de una obligación | `POST /obligaciones/abonos` |
-| Anular un movimiento (Movimientos › tocar uno) | `POST /movimientos/{id}/anular` |
+Interfaz adaptable a dispositivos móviles.
 
-## Modo sin conexión
+Mensajes breves y orientados al usuario.
 
-Usa los mismos módulos que el backend probó en `backend/JS/` (`js/offline-db.js` y `js/sync.js`); `js/offline.js` es la capa que llaman las pantallas.
+La evidencia financiera y la información técnica
+del asistente se presentan en secciones desplegables.
 
-- Funciona para **ingresos y gastos, transferencias y pagos o cobros de obligaciones**.
-- Cada operación se guarda en IndexedDB (`finanzas_offline`) con su UUID y el usuario que la creó.
-- Al volver la conexión (o al iniciar sesión) se envían **en orden**. El backend no las duplica porque reconoce el UUID, y la app solo borra la copia local si la respuesta trae ese mismo UUID.
-- Si el backend rechaza una (por ejemplo, saldo insuficiente), **la cola se detiene ahí**: las siguientes pueden depender de ella. En **Movimientos › En este celular** se puede reintentar (salvo errores 422, que son datos inválidos) o descartar la copia local.
-- Sin conexión, Inicio, Transferir y Pagar usan las últimas cuentas y obligaciones guardadas.
+## Autenticación
 
-## Lo que el frontend espera del backend
+- Registro.
+- Inicio de sesión.
+- Cambio de contraseña.
+- Solicitud de recuperación.
+- Restablecimiento mediante enlace temporal.
 
-| Necesita | Para | Mientras tanto |
-|---|---|---|
-| `GET /categorias` | Elegir categoría al registrar | Lista fija en `config.js` (ids 1–4 del script SQL) |
-| GMF en `POST /movimientos/normales` | Casilla 4x1000 | Casilla deshabilitada |
-| `POST /obligaciones` | Crear una deuda o un préstamo | Aviso en Deudas |
-| Presupuestos y metas (crear, abonar) | Botones de Metas | Deshabilitados con "pronto" |
-| Asistente (AI Gateway) | Pantalla Asistente | Pantalla informativa |
+Las operaciones de autenticación requieren conexión.
+
+Las contraseñas y los tokens de recuperación no
+se almacenan en IndexedDB.
+
+## Modo offline
+
+Las operaciones financieras compatibles se guardan
+localmente para su posterior sincronización.
+
+No se permite iniciar una nueva sesión offline.
+
+Los datos locales deben mantenerse aislados
+por usuario.
+
+No borrar IndexedDB si existen movimientos
+pendientes de sincronizar.
+
+## Asistente financiero
+
+Utiliza la API RAG del backend.
+
+El usuario debe autorizar el envío de su pregunta
+y evidencia recuperada al proveedor externo.
+
+Las consultas no modifican datos financieros.
+
+El diagnóstico sin IA está disponible en la
+sección Información técnica.
+
+## Service Worker
+
+Versión de referencia: fp-v31.
+
+Actualizar la versión de caché cuando se modifiquen
+los recursos estáticos.
+
+No almacenar respuestas privadas de la API
+en la caché del Service Worker.
+
+## Producción
+
+Actualizar js/config.js con la URL HTTPS del backend.
+
+Configurar Content Security Policy en index.html.
+
+Actualizar los orígenes CORS del backend.
+
+Actualizar PWA_ORIGEN para los enlaces
+de recuperación de contraseña.
+
+Consultar el README principal para instalación,
+arquitectura y pruebas.
