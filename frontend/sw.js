@@ -1,14 +1,6 @@
+// Service Worker: solo recursos estaticos de la PWA.
 
-// Service Worker de Finanzas Personales.
-//
-// Permite guardar los archivos estáticos
-// de la PWA para utilizarlos sin conexión.
-//
-// Las operaciones financieras pendientes
-// permanecen en IndexedDB.
-
-
-const VERSION = 'fp-v26 ';
+const VERSION = 'fp-v30';
 
 const ARCHIVOS = [
   './',
@@ -26,9 +18,11 @@ const ARCHIVOS = [
   'js/sync.js',
   'js/util.js',
   'js/saldo-consulta.js',
+  'js/rag-api.js',
 
   'js/vistas/comun.js',
   'js/vistas/login.js',
+  'js/vistas/password.js',
   'js/vistas/registro.js',
   'js/vistas/inicio.js',
   'js/vistas/crear-cuenta.js',
@@ -44,70 +38,96 @@ const ARCHIVOS = [
 ];
 
 
+const URLS = ARCHIVOS.map(
+  ruta => new URL(
+    ruta,
+    self.registration.scope
+  ).href
+);
+
+const PERMITIDOS = new Set(URLS);
+
+
 self.addEventListener('install', evento => {
-  evento.waitUntil(
-    caches.open(VERSION)
-      .then(cache => cache.addAll(ARCHIVOS))
-      .then(() => self.skipWaiting())
-  );
+
+  evento.waitUntil((async () => {
+
+    const cache = await caches.open(VERSION);
+
+    await cache.addAll(
+      URLS.map(
+        url => new Request(
+          url,
+          { cache: 'reload' }
+        )
+      )
+    );
+
+    await self.skipWaiting();
+
+  })());
+
 });
 
 
 self.addEventListener('activate', evento => {
-  evento.waitUntil(
-    caches.keys()
-      .then(claves => Promise.all(
-        claves
-          .filter(clave =>
-            clave.startsWith('fp-v') &&
-            clave !== VERSION
-          )
-          .map(clave => caches.delete(clave))
-      ))
-      .then(() => self.clients.claim())
-  );
+
+  evento.waitUntil((async () => {
+
+    const claves = await caches.keys();
+
+    await Promise.all(
+
+      claves.filter(
+        clave =>
+          clave.startsWith('fp-v') &&
+          clave !== VERSION
+      ).map(
+        clave => caches.delete(clave)
+      )
+
+    );
+
+    await self.clients.claim();
+
+  })());
+
 });
 
 
 self.addEventListener('fetch', evento => {
-  const url = new URL(evento.request.url);
+
+  const solicitud = evento.request;
+
+  // Nunca interceptar operaciones financieras,
+  // solicitudes autenticadas o recursos desconocidos.
 
   if (
-    evento.request.method !== 'GET' ||
-    url.origin !== self.location.origin
+    solicitud.method !== 'GET' ||
+
+    solicitud.headers.has('Authorization') ||
+
+    solicitud.cache === 'no-store' ||
+
+    !PERMITIDOS.has(solicitud.url)
   ) {
     return;
   }
 
-  evento.respondWith(
-    fetch(evento.request)
-      .then(respuesta => {
-        if (respuesta.ok) {
-          const copia = respuesta.clone();
+  evento.respondWith((async () => {
 
-          caches.open(VERSION)
-            .then(cache =>
-              cache.put(evento.request, copia)
-            )
-            .catch(() => {});
-        }
+    const cache = await caches.open(VERSION);
 
-        return respuesta;
-      })
-      .catch(async () => {
-        const guardada = await caches.match(
-          evento.request
-        );
+    const guardado = await cache.match(
+      solicitud.url
+    );
 
-        if (guardada) {
-          return guardada;
-        }
+    if (guardado) {
+      return guardado;
+    }
 
-        if (evento.request.mode === 'navigate') {
-          return caches.match('index.html');
-        }
+    return fetch(solicitud);
 
-        return Response.error();
-      })
-  );
+  })());
+
 });

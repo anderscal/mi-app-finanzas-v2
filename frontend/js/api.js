@@ -50,6 +50,7 @@ async function solicitar(
 ) {
   const headers = {};
   let body;
+  let token = null;
 
   if (json !== undefined) {
     headers['Content-Type'] = 'application/json';
@@ -63,7 +64,7 @@ async function solicitar(
   }
 
   if (conToken) {
-    const token = obtenerToken();
+    token = obtenerToken();
 
     if (!token) {
       location.hash = '#/login';
@@ -85,7 +86,8 @@ async function solicitar(
       {
         method: metodo,
         headers,
-        body
+        body,
+        cache: 'no-store'
       }
     );
 
@@ -101,6 +103,11 @@ async function solicitar(
     datos = await respuesta.json();
   } catch {
     // Respuesta sin JSON.
+  }
+
+  if (conToken && obtenerToken() !== token) {
+    if (!obtenerToken()) location.hash = '#/login';
+    throw new ErrorApi(401, 'La sesión cambió durante la solicitud.');
   }
 
   if (!respuesta.ok) {
@@ -153,6 +160,35 @@ export function iniciarSesion(email, password) {
     }
   });
 }
+
+export function solicitarRecuperacion(email) {
+
+  return solicitar('/auth/solicitar-recuperacion', {
+    metodo: 'POST',
+    conToken: false,
+    json: { email }
+  });
+}
+
+
+export function restablecerContrasena(datos) {
+
+  return solicitar('/auth/restablecer-contrasena', {
+    metodo: 'POST',
+    conToken: false,
+    json: datos
+  });
+}
+
+
+export function cambiarContrasena(datos) {
+
+  return solicitar('/auth/cambiar-contrasena', {
+    metodo: 'POST',
+    json: datos
+  });
+}
+
 
 export function obtenerPerfil() {
   return solicitar('/auth/me');

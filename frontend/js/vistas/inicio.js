@@ -538,6 +538,29 @@ export async function render(c) {
             ${icono('ojo')}
           </button>
 
+          <a
+            class="btn-icono"
+            href="#/cambiar-contrasena"
+            aria-label="Cambiar contraseña"
+            title="Cambiar contraseña"
+          >
+            <svg
+              aria-hidden="true"
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <rect x="5" y="11"
+                width="14" height="10" rx="2"/>
+
+              <path d="M8 11V7a4 4 0 0 1 8 0v4M12 15v2"/>
+            </svg>
+          </a>
+
           <button
             type="button"
             class="btn-icono"

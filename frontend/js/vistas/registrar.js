@@ -31,6 +31,17 @@ import {
 import { obtenerUsuario } from '../sesion.js';
 
 
+const TASA_GMF = 0.004;
+
+const copDecimales = valor =>
+  new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(valor);
+
+
 export async function render(c) {
   const estado = {
     tipo: 'GASTO',
@@ -70,6 +81,10 @@ export async function render(c) {
         gap: 12px;
       }
 
+      .mov-saldos .fila strong {
+        text-align: right;
+      }
+
       .mov-saldos .principal {
         font-size: 15px;
         font-weight: 800;
@@ -80,6 +95,7 @@ export async function render(c) {
         font-size: 12px;
         color: #975212;
         font-weight: 700;
+        line-height: 1.5;
       }
 
       .mov-saldos .nota-saldo {
@@ -87,13 +103,16 @@ export async function render(c) {
         color: #59675f;
         line-height: 1.45;
       }
+
+      .mov-gmf-nota {
+        font-size: 12px;
+        color: #705821;
+        line-height: 1.5;
+      }
     </style>
 
     <form id="form-mov" novalidate>
-      <header
-        class="banda banda-form"
-        id="banda-mov"
-      >
+      <header class="banda banda-form" id="banda-mov">
         <div class="banda-fila">
           <a
             class="btn-icono"
@@ -205,10 +224,7 @@ export async function render(c) {
         <fieldset class="campo">
           <legend>Categoría</legend>
 
-          <div
-            class="chips"
-            id="chips"
-          ></div>
+          <div class="chips" id="chips"></div>
 
           <p
             id="aviso-categorias"
@@ -221,21 +237,19 @@ export async function render(c) {
           <div class="gmf-fila">
             <input
               id="mov-gmf"
+              name="aplica_gmf"
               type="checkbox"
-              disabled
             >
 
             <label for="mov-gmf">
-              Esta operación generó GMF (4x1000)
+              Este gasto generó GMF (4×1000)
             </label>
           </div>
 
-          <small>
-            Pendiente en el backend:
-            <code>
-              POST /movimientos/normales
-            </code>
-            todavía no recibe GMF.
+          <small class="mov-gmf-nota">
+            Márcalo solo si corresponde el cobro.
+            El 0,4 % se sumará al dinero que sale
+            de la cuenta.
           </small>
         </div>
 
@@ -266,12 +280,28 @@ export async function render(c) {
   const monto = c.querySelector('#mov-monto');
   const error = c.querySelector('#mov-error');
   const selectCuenta = c.querySelector('#mov-cuenta');
+  const gmf = c.querySelector('#mov-gmf');
 
   let categorias = [];
 
   const avisoCategorias = c.querySelector(
     '#aviso-categorias'
   );
+
+  const importeActual = () => Number(
+    monto.value.replace(/\D/g, '')
+  ) || 0;
+
+  const gmfActual = () => {
+    if (estado.tipo !== 'GASTO' || !gmf.checked) {
+      return 0;
+    }
+
+    // Mismo redondeo a centavos que el backend.
+    return Math.round(
+      importeActual() * TASA_GMF * 100
+    ) / 100;
+  };
 
 
   // ------------------------------------
@@ -301,11 +331,7 @@ export async function render(c) {
       Number(cat.id_categoria) > 0
     );
 
-    guardarCache(
-      'categorias',
-      categorias
-    );
-
+    guardarCache('categorias', categorias);
     avisoCategorias.textContent = '';
 
   } catch (e) {
@@ -341,7 +367,7 @@ export async function render(c) {
 
 
   // ------------------------------------
-  // MONTO Y SALDO VISIBLE
+  // MONTO, TIPO Y GMF
   // ------------------------------------
 
   monto.addEventListener('input', () => {
@@ -355,6 +381,8 @@ export async function render(c) {
 
     pintarSaldos();
   });
+
+  gmf.addEventListener('change', pintarSaldos);
 
 
   function pintarTipo() {
@@ -372,8 +400,16 @@ export async function render(c) {
         estado.tipo === 'INGRESO'
       );
 
-    c.querySelector('#gmf').hidden =
-      estado.tipo !== 'GASTO';
+    const esGasto = estado.tipo === 'GASTO';
+
+    c.querySelector('#gmf').hidden = !esGasto;
+
+    // Nunca enviar GMF en un ingreso.
+    if (!esGasto) {
+      gmf.checked = false;
+    }
+
+    gmf.disabled = !esGasto;
 
     pintarOpcionesCuenta();
     pintarSaldos();
@@ -543,9 +579,9 @@ export async function render(c) {
       ? null
       : real - reservado;
 
-    const importe = Number(
-      monto.value.replace(/\D/g, '')
-    );
+    const importe = importeActual();
+    const impuesto = gmfActual();
+    const debito = importe + impuesto;
 
     const avisoFuente = cuentasDesdeCache
       ? 'Cuentas guardadas · confirmar al sincronizar. '
@@ -563,10 +599,7 @@ export async function render(c) {
         </div>
 
         <div class="fila principal">
-          <span>
-            Estimado después del ingreso
-          </span>
-
+          <span>Estimado después del ingreso</span>
           <strong class="monto">
             ${cop(real + importe)}
           </strong>
@@ -584,7 +617,7 @@ export async function render(c) {
 
     const supera =
       libre !== null &&
-      importe > libre;
+      debito > libre;
 
     caja.innerHTML = `
       <div class="fila">
@@ -607,7 +640,6 @@ export async function render(c) {
 
       <div class="fila principal">
         <span>Disponible para gastar</span>
-
         <strong class="monto">
           ${
             libre === null
@@ -617,12 +649,38 @@ export async function render(c) {
         </strong>
       </div>
 
+      <div class="fila">
+        <span>GMF estimado (4×1000)</span>
+        <strong class="monto">
+          ${copDecimales(impuesto)}
+        </strong>
+      </div>
+
+      <div class="fila">
+        <span>Total a descontar (gasto + GMF)</span>
+        <strong class="monto">
+          ${copDecimales(debito)}
+        </strong>
+      </div>
+
+      <div class="fila principal">
+        <span>Libre después (estimado)</span>
+        <strong class="monto">
+          ${
+            libre === null
+              ? 'Sin verificar'
+              : copDecimales(libre - debito)
+          }
+        </strong>
+      </div>
+
       ${
         supera
           ? `
             <div class="advertencia">
-              El gasto supera el saldo libre mostrado.
-              Reduce el monto o libera ahorro en Metas.
+              El gasto y el GMF superan el saldo libre
+              mostrado. Reduce el monto o libera ahorro
+              desde Metas.
             </div>
           `
           : ''
@@ -697,7 +755,6 @@ export async function render(c) {
     `;
 
     error.textContent = e.message;
-
     pintarSaldos();
   }
 
@@ -717,9 +774,7 @@ export async function render(c) {
 
     error.textContent = '';
 
-    const valor = Number(
-      monto.value.replace(/\D/g, '')
-    );
+    const valor = importeActual();
 
     if (!valor) {
       error.textContent =
@@ -756,7 +811,9 @@ export async function render(c) {
       monto: valor,
       fecha_movimiento: fecha,
       descripcion:
-        form.descripcion.value.trim() || null
+        form.descripcion.value.trim() || null,
+      aplica_gmf:
+        estado.tipo === 'GASTO' && gmf.checked
     };
 
     const contenidoActual = JSON.stringify(

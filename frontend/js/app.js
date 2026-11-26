@@ -7,6 +7,7 @@ import { icono, aviso } from './util.js';
 
 import * as login from './vistas/login.js';
 import * as registro from './vistas/registro.js';
+import * as password from './vistas/password.js';
 import * as inicio from './vistas/inicio.js';
 import * as crearCuenta from './vistas/crear-cuenta.js';
 import * as editarCuenta from './vistas/editar-cuenta.js';
@@ -31,6 +32,25 @@ const RUTAS = {
     publica: true,
     nav: null
   },
+  '/recuperar-contrasena': {
+    vista: password.recuperar,
+    publica: true,
+    permiteSesion: true,
+    nav: null
+  },
+
+  '/restablecer-contrasena': {
+    vista: password.restablecer,
+    publica: true,
+    permiteSesion: true,
+    nav: null
+  },
+
+  '/cambiar-contrasena': {
+    vista: password.cambiar,
+    nav: null
+  },
+
   '/inicio': {
     vista: inicio,
     nav: 'inicio'
@@ -131,10 +151,39 @@ async function navegar() {
   const fragmento =
     location.hash.replace(/^#/, '') || '/inicio';
 
-  const [, base = 'inicio', parametro] =
-    fragmento.split('/');
+  const corte = fragmento.indexOf('?');
+
+  const camino = corte < 0
+    ? fragmento
+    : fragmento.slice(0, corte);
+
+  const consulta = corte < 0
+    ? ''
+    : fragmento.slice(corte + 1);
+
+  let [, base = 'inicio', parametro] = camino.split('/');
 
   const ruta = '/' + base;
+
+  if (ruta === '/restablecer-contrasena') {
+
+    const tokens = new URLSearchParams(
+      consulta
+    ).getAll('token');
+
+    parametro = tokens.length === 1
+      ? tokens[0]
+      : null;
+
+    // Retirar el secreto de la URL,
+    // sin guardarlo localmente.
+
+    history.replaceState(
+      null,
+      '',
+      '#/restablecer-contrasena'
+    );
+  }
   const definicion = RUTAS[ruta];
 
   if (!definicion) {
@@ -149,7 +198,7 @@ async function navegar() {
     return;
   }
 
-  if (definicion.publica && autenticada) {
+  if (definicion.publica && autenticada && !definicion.permiteSesion) {
     location.hash = '#/inicio';
     return;
   }
@@ -173,12 +222,10 @@ async function navegar() {
   } catch (error) {
     console.error(error);
 
-    contenedor.innerHTML = `
-      <p class="error-general">
-        No se pudo cargar esta pantalla.
-        ${error.message || ''}
-      </p>
-    `;
+    const mensaje = document.createElement('p');
+    mensaje.className = 'error-general';
+    mensaje.textContent = 'No se pudo cargar esta pantalla. ' + (error?.message || '');
+    contenedor.replaceChildren(mensaje);
   }
 }
 
