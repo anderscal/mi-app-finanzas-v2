@@ -1,7 +1,7 @@
 
 from decimal import Decimal
 
-from fastapi import HTTPException
+from app.business.errores import CodigoError, ErrorNegocio
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -43,9 +43,9 @@ def _validar_usuario(
     )
 
     if usuario is None:
-        raise HTTPException(
-            status_code=401,
-            detail="Usuario no válido"
+        raise ErrorNegocio(
+            codigo=CodigoError.NO_AUTENTICADO,
+            detalle="Usuario no válido"
         )
 
     return usuario
@@ -63,15 +63,15 @@ def _obtener_cuenta_bloqueada(
     )
 
     if cuenta is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Cuenta no encontrada"
+        raise ErrorNegocio(
+            codigo=CodigoError.NO_ENCONTRADO,
+            detalle="Cuenta no encontrada"
         )
 
     if cuenta.estado != "ACTIVA":
-        raise HTTPException(
-            status_code=409,
-            detail="La cuenta está inactiva"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="La cuenta está inactiva"
         )
 
     return cuenta
@@ -89,15 +89,15 @@ def _obtener_meta_bloqueada(
     )
 
     if meta is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Meta no encontrada"
+        raise ErrorNegocio(
+            codigo=CodigoError.NO_ENCONTRADO,
+            detalle="Meta no encontrada"
         )
 
     if meta.estado not in ("ACTIVA", "CUMPLIDA"):
-        raise HTTPException(
-            status_code=409,
-            detail="La meta está inactiva"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="La meta está inactiva"
         )
 
     return meta
@@ -118,9 +118,9 @@ def _validar_consistencia(
         vinculado < CERO
         or vinculado > meta.monto_acumulado
     ):
-        raise HTTPException(
-            status_code=409,
-            detail=(
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle=(
                 "Los aportes de la meta no coinciden "
                 "con sus reservas. Requiere conciliación"
             )
@@ -148,9 +148,9 @@ def _respuesta_operacion(
     )
 
     if cuenta is None or meta is None:
-        raise HTTPException(
-            status_code=409,
-            detail="Datos financieros inconsistentes"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="Datos financieros inconsistentes"
         )
 
     saldo_real = calcular_saldo_cuenta(
@@ -206,9 +206,9 @@ def _revisar_reintento(
     )
 
     if not misma_operacion:
-        raise HTTPException(
-            status_code=409,
-            detail=(
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle=(
                 "UUID ya utilizado con otros datos "
                 "o por otra operación"
             )
@@ -230,9 +230,9 @@ def _registrar_operacion(
     tipo: str
 ):
     if tipo not in ("RESERVA", "LIBERACION"):
-        raise HTTPException(
-            status_code=422,
-            detail="Tipo de operación no válido"
+        raise ErrorNegocio(
+            codigo=CodigoError.VALIDACION,
+            detalle="Tipo de operación no válido"
         )
 
     try:
@@ -289,9 +289,9 @@ def _registrar_operacion(
             db,
             datos.uuid_operacion
         ):
-            raise HTTPException(
-                status_code=409,
-                detail=(
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle=(
                     "El UUID pertenece a un "
                     "movimiento bancario"
                 )
@@ -315,9 +315,9 @@ def _registrar_operacion(
         )
 
         if reservado_cuenta < CERO:
-            raise HTTPException(
-                status_code=409,
-                detail=(
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle=(
                     "La cuenta tiene reservas "
                     "inconsistentes"
                 )
@@ -325,9 +325,9 @@ def _registrar_operacion(
 
         if tipo == "RESERVA":
             if meta.estado != "ACTIVA":
-                raise HTTPException(
-                    status_code=409,
-                    detail=(
+                raise ErrorNegocio(
+                    codigo=CodigoError.CONFLICTO,
+                    detalle=(
                         "La meta ya está cumplida. "
                         "No admite más reservas"
                     )
@@ -338,9 +338,9 @@ def _registrar_operacion(
             )
 
             if saldo_libre < datos.monto:
-                raise HTTPException(
-                    status_code=409,
-                    detail=(
+                raise ErrorNegocio(
+                    codigo=CodigoError.CONFLICTO,
+                    detalle=(
                         "Saldo libre insuficiente "
                         "para reservar el dinero"
                     )
@@ -351,9 +351,9 @@ def _registrar_operacion(
             )
 
             if nuevo_acumulado > meta.monto_objetivo:
-                raise HTTPException(
-                    status_code=409,
-                    detail=(
+                raise ErrorNegocio(
+                    codigo=CodigoError.CONFLICTO,
+                    detalle=(
                         "La reserva supera lo "
                         "pendiente de la meta"
                     )
@@ -384,9 +384,9 @@ def _registrar_operacion(
                     reservado_en_meta_cuenta -= evento.monto
 
             if reservado_en_meta_cuenta < datos.monto:
-                raise HTTPException(
-                    status_code=409,
-                    detail=(
+                raise ErrorNegocio(
+                    codigo=CodigoError.CONFLICTO,
+                    detalle=(
                         "No hay suficiente dinero "
                         "reservado en esta cuenta "
                         "para esta meta"
@@ -398,9 +398,9 @@ def _registrar_operacion(
             )
 
             if nuevo_acumulado < CERO:
-                raise HTTPException(
-                    status_code=409,
-                    detail=(
+                raise ErrorNegocio(
+                    codigo=CodigoError.CONFLICTO,
+                    detalle=(
                         "La liberación supera el "
                         "ahorro acumulado"
                     )
@@ -448,9 +448,9 @@ def _registrar_operacion(
     except IntegrityError:
         db.rollback()
 
-        raise HTTPException(
-            status_code=409,
-            detail=(
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle=(
                 "Conflicto de integridad al registrar "
                 "la reserva. Verifica los datos "
                 "antes de reintentar"
@@ -537,9 +537,9 @@ def consultar_detalle_reservas(
     )
 
     if meta is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Meta no encontrada"
+        raise ErrorNegocio(
+            codigo=CodigoError.NO_ENCONTRADO,
+            detalle="Meta no encontrada"
         )
 
     vinculado = reservado_por_meta(

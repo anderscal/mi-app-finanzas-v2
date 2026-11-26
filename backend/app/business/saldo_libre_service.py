@@ -1,7 +1,7 @@
 
 from decimal import Decimal
 
-from fastapi import HTTPException
+from app.business.errores import CodigoError, ErrorNegocio
 from sqlalchemy.orm import Session
 
 from app.persistence.movimiento_escritura_repository import (
@@ -63,15 +63,15 @@ def exigir_saldo_libre(
     importe = Decimal(importe)
 
     if importe <= CERO:
-        raise HTTPException(
-            status_code=422,
-            detail="El importe debe ser positivo"
+        raise ErrorNegocio(
+            codigo=CodigoError.VALIDACION,
+            detalle="El importe debe ser positivo"
         )
 
     if cuenta.estado != "ACTIVA":
-        raise HTTPException(
-            status_code=409,
-            detail="La cuenta está inactiva"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="La cuenta está inactiva"
         )
 
     disponibilidad = consultar_disponibilidad_cuenta(
@@ -80,18 +80,18 @@ def exigir_saldo_libre(
     )
 
     if disponibilidad["monto_reservado"] < CERO:
-        raise HTTPException(
-            status_code=409,
-            detail=(
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle=(
                 "La cuenta tiene reservas inconsistentes. "
                 "Es necesaria una revisión financiera"
             )
         )
 
     if disponibilidad["saldo_libre"] < importe:
-        raise HTTPException(
-            status_code=409,
-            detail=(
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle=(
                 "Saldo libre insuficiente. "
                 "Saldo real: "
                 f"{disponibilidad['saldo_real']:.2f}; "

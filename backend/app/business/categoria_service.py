@@ -1,11 +1,11 @@
-from fastapi import HTTPException
-from sqlalchemy import select
+from app.persistence.unidad_trabajo_repository import refrescar_entidad
+from app.business.errores import CodigoError, ErrorNegocio
+from app.persistence.usuario_repository import bloquear_usuario
 from sqlalchemy.orm import Session
 from app.schemas.categoria_schema import CategoriaCrear
 from app.schemas.categoria_schema import CategoriaActualizar
 
 from app.models import (
-    Usuario,
     CategoriaMovimiento,
 )
 
@@ -24,12 +24,10 @@ def crear_categoria_financiera(db: Session, id_usuario: int, datos: CategoriaCre
     try:
         # Serializar creaciones del mismo usuario
         # para reducir duplicaciones concurrentes.
-        usuario = db.scalar(
-            select(Usuario).where(Usuario.id_usuario == id_usuario).with_for_update()
-        )
+        usuario = bloquear_usuario(db, id_usuario)
 
         if usuario is None:
-            raise HTTPException(status_code=401, detail="Usuario no válido")
+            raise ErrorNegocio(codigo=CodigoError.NO_AUTENTICADO, detalle="Usuario no válido")
 
         existente = buscar_categoria_duplicada(
             db=db,
@@ -39,9 +37,9 @@ def crear_categoria_financiera(db: Session, id_usuario: int, datos: CategoriaCre
         )
 
         if existente is not None:
-            raise HTTPException(
-                status_code=409,
-                detail=("Ya existe una categoría " "con ese nombre y tipo"),
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle=("Ya existe una categoría " "con ese nombre y tipo"),
             )
 
         categoria = CategoriaMovimiento(
@@ -55,7 +53,7 @@ def crear_categoria_financiera(db: Session, id_usuario: int, datos: CategoriaCre
         insertar_categoria(db=db, categoria=categoria)
 
         db.commit()
-        db.refresh(categoria)
+        refrescar_entidad(db, categoria)
 
         return categoria
 
@@ -69,27 +67,25 @@ def _obtener_categoria_personal_bloqueada(
 ):
     # Utilizar el mismo orden de bloqueo que
     # la creación de categorías: primero usuario.
-    usuario = db.scalar(
-        select(Usuario).where(Usuario.id_usuario == id_usuario).with_for_update()
-    )
+    usuario = bloquear_usuario(db, id_usuario)
 
     if usuario is None:
-        raise HTTPException(status_code=401, detail="Usuario no válido")
+        raise ErrorNegocio(codigo=CodigoError.NO_AUTENTICADO, detalle="Usuario no válido")
 
     categoria = obtener_categoria_administrable(
         db=db, id_usuario=id_usuario, id_categoria=id_categoria
     )
 
     if categoria is None:
-        raise HTTPException(status_code=404, detail="Categoría no encontrada")
+        raise ErrorNegocio(codigo=CodigoError.NO_ENCONTRADO, detalle="Categoría no encontrada")
 
     if categoria.es_sistema:
-        raise HTTPException(
-            status_code=403, detail=("No puedes modificar categorías " "del sistema")
+        raise ErrorNegocio(
+            codigo=CodigoError.PROHIBIDO, detalle=("No puedes modificar categorías " "del sistema")
         )
 
     if categoria.id_usuario != id_usuario:
-        raise HTTPException(status_code=404, detail="Categoría no encontrada")
+        raise ErrorNegocio(codigo=CodigoError.NO_ENCONTRADO, detalle="Categoría no encontrada")
 
     return categoria
 
@@ -107,9 +103,9 @@ def actualizar_categoria_financiera(
         )
 
         if categoria.estado != "ACTIVA":
-            raise HTTPException(
-                status_code=409,
-                detail=(
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle=(
                     "No puedes editar una categoría inactiva"
                 )
             )
@@ -123,9 +119,9 @@ def actualizar_categoria_financiera(
         )
 
         if existente is not None:
-            raise HTTPException(
-                status_code=409,
-                detail=(
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle=(
                     "Ya existe otra categoría "
                     "con ese nombre y tipo"
                 )
@@ -136,7 +132,7 @@ def actualizar_categoria_financiera(
         )
 
         db.commit()
-        db.refresh(categoria)
+        refrescar_entidad(db, categoria)
 
         return categoria
 
@@ -160,16 +156,16 @@ def desactivar_categoria_financiera(
             "ACTIVA",
             "INACTIVA"
         ):
-            raise HTTPException(
-                status_code=409,
-                detail="Estado de categoría no válido"
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle="Estado de categoría no válido"
             )
 
         if categoria.estado == "ACTIVA":
             categoria.estado = "INACTIVA"
 
         db.commit()
-        db.refresh(categoria)
+        refrescar_entidad(db, categoria)
 
         return categoria
 

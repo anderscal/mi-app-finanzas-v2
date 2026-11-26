@@ -1,21 +1,21 @@
-"""Punto de entrada y composicion de la aplicacion.
+"""Punto de entrada y composicion de la aplicacion."""
 
-Inicializa los componentes y registra las rutas.
-No contiene reglas financieras ni consultas SQL.
-"""
+import os
+
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from sqlalchemy import event
 
-# Registro explicito de eventos de sincronizacion RDF.
-# Al importar el modulo se registran sus listeners
-# sobre SesionFinanciera.
-#
-# Este registro ya no depende de database.py.
+from app.persistence.database import SesionFinanciera
 
-import app.services.semantica_auto_sync  # noqa: F401
+from app.business import semantica_auto_sync as sync
 
+from app.business.errores import ErrorNegocio
+
+from app.routers.errores import manejar_error_negocio
 
 from app.routers import (
     auth_router,
@@ -30,6 +30,130 @@ from app.routers import (
 )
 
 
+# ========================================
+# CONFIGURACION DE ORIGENES CORS
+# ========================================
+
+ORIGENES_LOCALES = (
+    "http://127.0.0.1:5500",
+    "http://localhost:5500",
+    "http://127.0.0.1:5501",
+    "http://localhost:5501",
+)
+
+
+def obtener_origenes_cors():
+
+    configuracion = os.getenv(
+        "CORS_ORIGINS"
+    )
+
+    if configuracion is None:
+        return list(ORIGENES_LOCALES)
+
+    origenes = []
+
+    for valor in configuracion.split(","):
+
+        origen = valor.strip()
+
+        if not origen:
+            continue
+
+        try:
+
+            url = urlsplit(origen)
+
+            # Fuerza la validacion del puerto.
+            puerto = url.port
+
+        except ValueError as error:
+
+            raise RuntimeError(
+                "Origen CORS invalido"
+            ) from error
+
+        if (
+            "*" in origen
+
+            or url.scheme not in {"http", "https"}
+
+            or not url.hostname
+
+            or url.username is not None
+
+            or url.password is not None
+
+            or url.path
+
+            or url.query
+
+            or url.fragment
+
+            or (
+                puerto is not None
+                and puerto <= 0
+            )
+        ):
+
+            raise RuntimeError(
+                "CORS_ORIGINS contiene un origen invalido"
+            )
+
+        if (
+            url.scheme == "http"
+
+            and url.hostname not in {
+                "localhost",
+                "127.0.0.1",
+                "::1",
+            }
+        ):
+
+            raise RuntimeError(
+                "Los origenes externos deben utilizar HTTPS"
+            )
+
+        if origen not in origenes:
+
+            origenes.append(origen)
+
+    if not origenes:
+
+        raise RuntimeError(
+            "CORS_ORIGINS no contiene origenes autorizados"
+        )
+
+    return origenes
+
+
+# ========================================
+# EVENTOS DE SINCRONIZACION SEMANTICA
+# ========================================
+
+for nombre_evento, funcion_evento in (
+    ("before_flush", sync._marcar_cambios),
+    ("after_commit", sync._publicar_despues_de_commit),
+    ("after_rollback", sync._limpiar_rollback),
+):
+
+    if not event.contains(
+        SesionFinanciera,
+        nombre_evento,
+        funcion_evento,
+    ):
+
+        event.listen(
+            SesionFinanciera,
+            nombre_evento,
+            funcion_evento,
+        )
+
+
+# ========================================
+# APLICACION FASTAPI
+# ========================================
+
 app = FastAPI(
     title="API Finanzas Personales",
 
@@ -42,15 +166,16 @@ app = FastAPI(
 )
 
 
+app.add_exception_handler(
+    ErrorNegocio,
+    manejar_error_negocio,
+)
+
+
 app.add_middleware(
     CORSMiddleware,
 
-    allow_origins=[
-        "http://127.0.0.1:5500",
-        "http://localhost:5500",
-        "http://127.0.0.1:5501",
-        "http://localhost:5501",
-    ],
+    allow_origins=obtener_origenes_cors(),
 
     allow_credentials=False,
 
@@ -67,6 +192,10 @@ app.add_middleware(
     ],
 )
 
+
+# ========================================
+# REGISTRO DE ROUTERS
+# ========================================
 
 app.include_router(auth_router.router)
 app.include_router(cuenta_router.router)
@@ -98,4 +227,4 @@ def verificar_salud():
         "servicio": "FastAPI",
 
         "estado": "activo",
-    } 
+    }

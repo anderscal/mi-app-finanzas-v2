@@ -2,7 +2,8 @@
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 
-from fastapi import HTTPException
+from app.persistence.unidad_trabajo_repository import refrescar_entidad
+from app.business.errores import CodigoError, ErrorNegocio
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -38,9 +39,9 @@ def _bloquear_propietario(
     )
 
     if usuario is None:
-        raise HTTPException(
-            status_code=401,
-            detail="Usuario no válido"
+        raise ErrorNegocio(
+            codigo=CodigoError.NO_AUTENTICADO,
+            detalle="Usuario no válido"
         )
 
 
@@ -56,9 +57,9 @@ def _meta_propia_bloqueada(
     )
 
     if meta is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Meta no encontrada"
+        raise ErrorNegocio(
+            codigo=CodigoError.NO_ENCONTRADO,
+            detalle="Meta no encontrada"
         )
 
     return meta
@@ -116,9 +117,9 @@ def consultar_meta(
     )
 
     if meta is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Meta no encontrada"
+        raise ErrorNegocio(
+            codigo=CodigoError.NO_ENCONTRADO,
+            detalle="Meta no encontrada"
         )
 
     return meta
@@ -142,9 +143,9 @@ def crear_meta(
         )
 
         if duplicada is not None:
-            raise HTTPException(
-                status_code=409,
-                detail=(
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle=(
                     "Ya existe una meta con ese nombre"
                 )
             )
@@ -165,16 +166,16 @@ def crear_meta(
         )
 
         db.commit()
-        db.refresh(meta)
+        refrescar_entidad(db, meta)
 
         return meta
 
     except IntegrityError:
         db.rollback()
 
-        raise HTTPException(
-            status_code=409,
-            detail="Conflicto al crear la meta"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="Conflicto al crear la meta"
         )
 
     except Exception:
@@ -193,9 +194,9 @@ def actualizar_meta(
     )
 
     if not cambios:
-        raise HTTPException(
-            status_code=422,
-            detail="Indica al menos un cambio"
+        raise ErrorNegocio(
+            codigo=CodigoError.VALIDACION,
+            detalle="Indica al menos un cambio"
         )
 
     try:
@@ -211,9 +212,9 @@ def actualizar_meta(
         )
 
         if meta.estado == "INACTIVA":
-            raise HTTPException(
-                status_code=409,
-                detail="La meta está inactiva"
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle="La meta está inactiva"
             )
 
         if "nombre_meta" in cambios:
@@ -227,9 +228,9 @@ def actualizar_meta(
             )
 
             if duplicada is not None:
-                raise HTTPException(
-                    status_code=409,
-                    detail=(
+                raise ErrorNegocio(
+                    codigo=CodigoError.CONFLICTO,
+                    detalle=(
                         "Ya existe otra meta "
                         "con ese nombre"
                     )
@@ -241,9 +242,9 @@ def actualizar_meta(
             objetivo = cambios["monto_objetivo"]
 
             if objetivo < meta.monto_acumulado:
-                raise HTTPException(
-                    status_code=409,
-                    detail=(
+                raise ErrorNegocio(
+                    codigo=CodigoError.CONFLICTO,
+                    detalle=(
                         "El objetivo no puede ser menor "
                         "que el ahorro acumulado"
                     )
@@ -255,17 +256,17 @@ def actualizar_meta(
             fecha = cambios["fecha_objetivo"]
 
             if fecha is None:
-                raise HTTPException(
-                    status_code=422,
-                    detail=(
+                raise ErrorNegocio(
+                    codigo=CodigoError.VALIDACION,
+                    detalle=(
                         "La fecha objetivo es obligatoria"
                     )
                 )
 
             if fecha < date.today():
-                raise HTTPException(
-                    status_code=422,
-                    detail=(
+                raise ErrorNegocio(
+                    codigo=CodigoError.VALIDACION,
+                    detalle=(
                         "La nueva fecha objetivo "
                         "no puede ser pasada"
                     )
@@ -283,16 +284,16 @@ def actualizar_meta(
         )
 
         db.commit()
-        db.refresh(meta)
+        refrescar_entidad(db, meta)
 
         return meta
 
     except IntegrityError:
         db.rollback()
 
-        raise HTTPException(
-            status_code=409,
-            detail="Conflicto al editar la meta"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="Conflicto al editar la meta"
         )
 
     except Exception:
@@ -333,26 +334,26 @@ def registrar_aporte_meta(
             return respuesta
 
         if meta.estado != "ACTIVA":
-            raise HTTPException(
-                status_code=409,
-                detail=(
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle=(
                     "La meta no admite nuevos aportes"
                 )
             )
 
         if meta.monto_acumulado != esperado:
-            raise HTTPException(
-                status_code=409,
-                detail=(
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle=(
                     "El acumulado cambió. "
                     "Actualiza la meta antes de aportar"
                 )
             )
 
         if resultado_esperado > meta.monto_objetivo:
-            raise HTTPException(
-                status_code=409,
-                detail=(
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle=(
                     "El aporte supera el objetivo "
                     "pendiente de la meta"
                 )
@@ -377,9 +378,9 @@ def registrar_aporte_meta(
     except IntegrityError:
         db.rollback()
 
-        raise HTTPException(
-            status_code=409,
-            detail="Conflicto al registrar el aporte"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="Conflicto al registrar el aporte"
         )
 
     except Exception:
@@ -409,9 +410,9 @@ def desactivar_meta(
             return meta
 
         if meta.monto_acumulado > CERO:
-            raise HTTPException(
-                status_code=409,
-                detail=(
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle=(
                     "No puedes desactivar una meta "
                     "que tiene ahorro acumulado"
                 )
@@ -420,16 +421,16 @@ def desactivar_meta(
         meta.estado = "INACTIVA"
 
         db.commit()
-        db.refresh(meta)
+        refrescar_entidad(db, meta)
 
         return meta
 
     except IntegrityError:
         db.rollback()
 
-        raise HTTPException(
-            status_code=409,
-            detail="Conflicto al desactivar la meta"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="Conflicto al desactivar la meta"
         )
 
     except Exception:

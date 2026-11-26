@@ -30,13 +30,14 @@ from app.persistence.rag_semantico_repository import (
     EvidenciaSemanticaInvalida,
 )
 
-from app.services.fuseki_client import (
+from app.persistence.fuseki_client import (
     consultar_select,
     FusekiNoDisponible,
 )
 
-from app.services.semantica_auto_sync import (
+from app.business.semantica_auto_sync import (
     asegurar_actualizacion_para_rag,
+    renovar_para_rag,
 )
 
 
@@ -130,6 +131,16 @@ def _preparar_semantica(db, usuario):
     vigencia = evaluar_vigencia_rdf(
         contexto.get("fecha_instantanea")
     )
+
+    if vigencia["estado"] == "ANTIGUA" and renovar_para_rag(db, usuario):
+        contexto = obtener_contexto_semantico_basico(
+            id_usuario=usuario,
+            incluir_categorias=False,
+            ejecutar=consultar_select,
+        )
+        vigencia = evaluar_vigencia_rdf(
+            contexto.get("fecha_instantanea")
+        )
 
     if vigencia["estado"] != "RECIENTE":
 

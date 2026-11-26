@@ -18,7 +18,7 @@ from app.persistence.database import (
     SesionFinanciera,
 )
 
-from app.services import (
+from app.business import (
     semantica_auto_sync as sync,
 )
 
@@ -36,7 +36,7 @@ def test_278c2a_persistence_no_importa_services():
         "import sys\n"
         "import app.persistence.database\n"
         "assert "
-        "'app.services.semantica_auto_sync' "
+        "'app.business.semantica_auto_sync' "
         "not in sys.modules\n"
     )
 

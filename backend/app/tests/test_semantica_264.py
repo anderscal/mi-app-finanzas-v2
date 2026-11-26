@@ -35,7 +35,7 @@ def test_264_sincroniza_solo_grafo_del_usuario(client, db_session, monkeypatch):
     monkeypatch.setenv("SEMANTICA_EXPORTACION_LOCAL", "1")
     publicados = []
     monkeypatch.setattr(
-        'app.routers.semantica_router.publicar_grafo',
+        'app.business.semantica_auto_sync.publicar_grafo',
         lambda grafo, iri: publicados.append((grafo, iri)),
     )
 
@@ -99,7 +99,7 @@ def test_264_reserva_y_gmf_en_grafo(client, db_session, monkeypatch):
     monkeypatch.setenv("SEMANTICA_EXPORTACION_LOCAL", "1")
     capturados = []
     monkeypatch.setattr(
-        'app.routers.semantica_router.publicar_grafo',
+        'app.business.semantica_auto_sync.publicar_grafo',
         lambda grafo, iri: capturados.append(grafo),
     )
     respuesta = client.post(f'{RUTA}/sincronizar', headers=headers)
@@ -129,7 +129,7 @@ def test_264_consulta_sparql_solo_grafo_propio(client, db_session, monkeypatch):
             'libre': {'value': '600.00'},
         }]
 
-    monkeypatch.setattr('app.routers.semantica_router.consultar_select', simular)
+    monkeypatch.setattr('app.persistence.semantica_consulta_repository.consultar_select', simular)
     r = client.get(f'{RUTA}/cuentas', headers=headers)
     assert r.status_code == 200, r.text
     assert r.json()['cuentas'][0]['saldo_libre'] == '600.00'
@@ -143,7 +143,7 @@ def test_264_consulta_inconsistente_rechazada(client, db_session, monkeypatch):
         client, db_session, 'qa.264.inconsistente@example.com'
     )
     monkeypatch.setattr(
-        'app.routers.semantica_router.consultar_select',
+        'app.persistence.semantica_consulta_repository.consultar_select',
         lambda _: [{
             'id': {'value': '1'},
             'nombre': {'value': 'Cuenta'},

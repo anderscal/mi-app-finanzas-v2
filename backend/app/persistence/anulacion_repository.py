@@ -1,3 +1,8 @@
+"""Repositorio de consultas y bloqueos para anulaciones.
+
+Capa Persistence.
+"""
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -9,11 +14,51 @@ from app.models import (
 )
 
 
+def consultar_movimiento_usuario(
+    db: Session,
+    id_usuario: int,
+    id_movimiento: int,
+):
+    """Consulta inicial sin bloquear filas."""
+
+    consulta = (
+        select(Movimiento)
+        .join(
+            CuentaFinanciera,
+            Movimiento.id_cuenta
+            == CuentaFinanciera.id_cuenta
+        )
+        .where(
+            Movimiento.id_movimiento == id_movimiento,
+            CuentaFinanciera.id_usuario == id_usuario,
+        )
+    )
+
+    return db.scalar(consulta)
+
+
+def consultar_transferencia(
+    db: Session,
+    id_transferencia: int,
+):
+    """Lectura interna previa al bloqueo de ambas cuentas.
+
+    Business conserva las comprobaciones de propiedad
+    y consistencia antes de autorizar la anulacion.
+    """
+
+    return db.get(
+        Transferencia,
+        id_transferencia,
+    )
+
+
 def bloquear_movimiento_usuario(
     db: Session,
     id_movimiento: int,
-    id_usuario: int
+    id_usuario: int,
 ):
+
     consulta = (
         select(Movimiento)
         .join(
@@ -26,7 +71,7 @@ def bloquear_movimiento_usuario(
             == id_movimiento,
 
             CuentaFinanciera.id_usuario
-            == id_usuario
+            == id_usuario,
         )
         .with_for_update()
     )
@@ -36,8 +81,9 @@ def bloquear_movimiento_usuario(
 
 def bloquear_movimientos_transferencia(
     db: Session,
-    id_transferencia: int
+    id_transferencia: int,
 ):
+
     consulta = (
         select(Movimiento)
         .where(
@@ -53,8 +99,9 @@ def bloquear_movimientos_transferencia(
 
 def bloquear_transferencia(
     db: Session,
-    id_transferencia: int
+    id_transferencia: int,
 ):
+
     consulta = (
         select(Transferencia)
         .where(
@@ -69,8 +116,9 @@ def bloquear_transferencia(
 
 def bloquear_obligacion_anulacion(
     db: Session,
-    id_obligacion: int
+    id_obligacion: int,
 ):
+
     consulta = (
         select(ObligacionFinanciera)
         .where(

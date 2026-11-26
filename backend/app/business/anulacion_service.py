@@ -1,18 +1,18 @@
 
 from decimal import Decimal
 
-from fastapi import HTTPException
-from sqlalchemy import select
+from app.persistence.unidad_trabajo_repository import refrescar_entidad
+from app.business.errores import CodigoError, ErrorNegocio
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import (
-    CuentaFinanciera,
     Movimiento,
-    Transferencia,
 )
 
 from app.persistence.anulacion_repository import (
+    consultar_movimiento_usuario,
+    consultar_transferencia,
     bloquear_movimiento_usuario,
     bloquear_movimientos_transferencia,
     bloquear_transferencia,
@@ -46,9 +46,9 @@ def tipo_abono_obligacion(obligacion):
     if obligacion.tipo_obligacion == "POR_COBRAR":
         return "INGRESO"
 
-    raise HTTPException(
-        status_code=409,
-        detail="Tipo de obligación no válido"
+    raise ErrorNegocio(
+        codigo=CodigoError.CONFLICTO,
+        detalle="Tipo de obligación no válido"
     )
 
 
@@ -84,30 +84,7 @@ def recalcular_estado_obligacion(
     )
 
 
-def _consultar_movimiento_usuario(
-    db: Session,
-    id_usuario: int,
-    id_movimiento: int
-):
-    """
-    Consulta inicial de identificación.
 
-    Todavía NO modifica ni bloquea dinero.
-    Las filas necesarias se bloquearán
-    antes de verificar el saldo y anular.
-    """
-    return db.scalar(
-        select(Movimiento)
-        .join(
-            CuentaFinanciera,
-            Movimiento.id_cuenta
-            == CuentaFinanciera.id_cuenta
-        )
-        .where(
-            Movimiento.id_movimiento == id_movimiento,
-            CuentaFinanciera.id_usuario == id_usuario
-        )
-    )
 
 
 def _bloquear_cuenta_y_movimiento(
@@ -127,9 +104,9 @@ def _bloquear_cuenta_y_movimiento(
     )
 
     if cuenta is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Cuenta no encontrada"
+        raise ErrorNegocio(
+            codigo=CodigoError.NO_ENCONTRADO,
+            detalle="Cuenta no encontrada"
         )
 
     movimiento = bloquear_movimiento_usuario(
@@ -139,23 +116,23 @@ def _bloquear_cuenta_y_movimiento(
     )
 
     if movimiento is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Movimiento no encontrado"
+        raise ErrorNegocio(
+            codigo=CodigoError.NO_ENCONTRADO,
+            detalle="Movimiento no encontrado"
         )
 
-    db.refresh(movimiento)
+    refrescar_entidad(db, movimiento)
 
     if movimiento.id_cuenta != cuenta.id_cuenta:
-        raise HTTPException(
-            status_code=409,
-            detail="La cuenta del movimiento cambió"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="La cuenta del movimiento cambió"
         )
 
     if movimiento.estado != "ACTIVO":
-        raise HTTPException(
-            status_code=409,
-            detail="El movimiento ya está anulado"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="El movimiento ya está anulado"
         )
 
     return cuenta, movimiento
@@ -176,9 +153,9 @@ def _anular_normal(
     )
 
     if movimiento.origen != "NORMAL":
-        raise HTTPException(
-            status_code=409,
-            detail="Origen inconsistente"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="Origen inconsistente"
         )
 
     # Anular un ingreso elimina dinero
@@ -209,23 +186,20 @@ def _anular_transferencia(
     vista: Movimiento
 ):
     if vista.id_transferencia is None:
-        raise HTTPException(
-            status_code=409,
-            detail="Transferencia inconsistente"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="Transferencia inconsistente"
         )
 
     # Se consultan los IDs antes de bloquear
     # para obtener luego ambas cuentas
     # en orden ascendente.
-    transferencia_vista = db.get(
-        Transferencia,
-        vista.id_transferencia
-    )
+    transferencia_vista = consultar_transferencia(db, vista.id_transferencia)
 
     if transferencia_vista is None:
-        raise HTTPException(
-            status_code=409,
-            detail="Transferencia no encontrada"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="Transferencia no encontrada"
         )
 
     cuentas = bloquear_cuentas_usuario(
@@ -236,9 +210,9 @@ def _anular_transferencia(
     )
 
     if len(cuentas) != 2:
-        raise HTTPException(
-            status_code=404,
-            detail="Transferencia no encontrada"
+        raise ErrorNegocio(
+            codigo=CodigoError.NO_ENCONTRADO,
+            detalle="Transferencia no encontrada"
         )
 
     transferencia = bloquear_transferencia(
@@ -247,17 +221,17 @@ def _anular_transferencia(
     )
 
     if transferencia is None:
-        raise HTTPException(
-            status_code=409,
-            detail="Transferencia no encontrada"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="Transferencia no encontrada"
         )
 
-    db.refresh(transferencia)
+    refrescar_entidad(db, transferencia)
 
     if transferencia.estado != "ACTIVA":
-        raise HTTPException(
-            status_code=409,
-            detail="La transferencia ya fue anulada"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="La transferencia ya fue anulada"
         )
 
     movimientos = bloquear_movimientos_transferencia(
@@ -266,24 +240,24 @@ def _anular_transferencia(
     )
 
     if len(movimientos) != 2:
-        raise HTTPException(
-            status_code=409,
-            detail=(
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle=(
                 "La transferencia no tiene "
                 "los dos movimientos esperados"
             )
         )
 
     for movimiento in movimientos:
-        db.refresh(movimiento)
+        refrescar_entidad(db, movimiento)
 
         if (
             movimiento.estado != "ACTIVO"
             or movimiento.origen != "TRANSFERENCIA"
         ):
-            raise HTTPException(
-                status_code=409,
-                detail="Movimientos de transferencia inconsistentes"
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle="Movimientos de transferencia inconsistentes"
             )
 
     salidas = [
@@ -305,17 +279,17 @@ def _anular_transferencia(
     ]
 
     if len(salidas) != 1 or len(entradas) != 1:
-        raise HTTPException(
-            status_code=409,
-            detail="Direcciones de transferencia inconsistentes"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="Direcciones de transferencia inconsistentes"
         )
 
     if vista.id_movimiento not in {
         m.id_movimiento for m in movimientos
     }:
-        raise HTTPException(
-            status_code=409,
-            detail="El movimiento no pertenece a la transferencia"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="El movimiento no pertenece a la transferencia"
         )
 
     # Anular la transferencia retira el
@@ -353,9 +327,9 @@ def _anular_abono_obligacion(
     vista: Movimiento
 ):
     if vista.id_obligacion is None:
-        raise HTTPException(
-            status_code=409,
-            detail="Movimiento de obligación inconsistente"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="Movimiento de obligación inconsistente"
         )
 
     # Mismo orden que el registro de abonos:
@@ -369,9 +343,9 @@ def _anular_abono_obligacion(
         obligacion is None
         or obligacion.id_usuario != id_usuario
     ):
-        raise HTTPException(
-            status_code=404,
-            detail="Obligación no encontrada"
+        raise ErrorNegocio(
+            codigo=CodigoError.NO_ENCONTRADO,
+            detalle="Obligación no encontrada"
         )
 
     cuenta, movimiento = (
@@ -388,9 +362,9 @@ def _anular_abono_obligacion(
         or movimiento.id_obligacion
             != obligacion.id_obligacion
     ):
-        raise HTTPException(
-            status_code=409,
-            detail="Movimiento de obligación inconsistente"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="Movimiento de obligación inconsistente"
         )
 
     tipo_abono = tipo_abono_obligacion(
@@ -401,9 +375,9 @@ def _anular_abono_obligacion(
     # sentidos opuestos. El capital inicial
     # nunca se anula aisladamente.
     if movimiento.tipo != tipo_abono:
-        raise HTTPException(
-            status_code=409,
-            detail=(
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle=(
                 "El movimiento inicial de una "
                 "obligación no puede anularse "
                 "por separado"
@@ -445,22 +419,22 @@ def anular_movimiento(
     id_movimiento: int
 ):
     if id_usuario <= 0:
-        raise HTTPException(
-            status_code=401,
-            detail="Usuario no válido"
+        raise ErrorNegocio(
+            codigo=CodigoError.NO_AUTENTICADO,
+            detalle="Usuario no válido"
         )
 
     try:
-        vista = _consultar_movimiento_usuario(
+        vista = consultar_movimiento_usuario(
             db,
             id_usuario,
             id_movimiento
         )
 
         if vista is None:
-            raise HTTPException(
-                status_code=404,
-                detail="Movimiento no encontrado"
+            raise ErrorNegocio(
+                codigo=CodigoError.NO_ENCONTRADO,
+                detalle="Movimiento no encontrado"
             )
 
         if vista.origen == "NORMAL":
@@ -484,17 +458,17 @@ def anular_movimiento(
                 vista
             )
 
-        raise HTTPException(
-            status_code=409,
-            detail="Origen de movimiento no válido"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="Origen de movimiento no válido"
         )
 
     except IntegrityError:
         db.rollback()
 
-        raise HTTPException(
-            status_code=409,
-            detail="Conflicto de integridad al anular"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="Conflicto de integridad al anular"
         )
 
     except Exception:

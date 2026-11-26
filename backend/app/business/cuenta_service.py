@@ -1,7 +1,8 @@
 
 from decimal import Decimal
 
-from fastapi import HTTPException
+from app.persistence.unidad_trabajo_repository import refrescar_entidad
+from app.business.errores import CodigoError, ErrorNegocio
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -68,9 +69,9 @@ def crear_cuenta_financiera(
     datos: CuentaCrear
 ):
     if id_usuario <= 0:
-        raise HTTPException(
-            status_code=401,
-            detail="Usuario no válido"
+        raise ErrorNegocio(
+            codigo=CodigoError.NO_AUTENTICADO,
+            detalle="Usuario no válido"
         )
 
     existente = buscar_cuenta_por_nombre(
@@ -80,9 +81,9 @@ def crear_cuenta_financiera(
     )
 
     if existente is not None:
-        raise HTTPException(
-            status_code=409,
-            detail=(
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle=(
                 "Ya tienes una cuenta financiera "
                 "con ese nombre"
             )
@@ -104,16 +105,16 @@ def crear_cuenta_financiera(
         )
 
         db.commit()
-        db.refresh(nueva_cuenta)
+        refrescar_entidad(db, nueva_cuenta)
 
         return nueva_cuenta
 
     except IntegrityError:
         db.rollback()
 
-        raise HTTPException(
-            status_code=409,
-            detail=(
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle=(
                 "No fue posible crear la cuenta "
                 "por un conflicto de integridad"
             )
@@ -135,18 +136,18 @@ def actualizar_cuenta_financiera(
     )
 
     if not cambios:
-        raise HTTPException(
-            status_code=422,
-            detail="Debes indicar al menos un campo"
+        raise ErrorNegocio(
+            codigo=CodigoError.VALIDACION,
+            detalle="Debes indicar al menos un campo"
         )
 
     if (
         "nombre_cuenta" in cambios
         and cambios["nombre_cuenta"] is None
     ):
-        raise HTTPException(
-            status_code=422,
-            detail="El nombre no puede ser nulo"
+        raise ErrorNegocio(
+            codigo=CodigoError.VALIDACION,
+            detalle="El nombre no puede ser nulo"
         )
 
     try:
@@ -157,15 +158,15 @@ def actualizar_cuenta_financiera(
         )
 
         if cuenta is None:
-            raise HTTPException(
-                status_code=404,
-                detail="Cuenta no encontrada"
+            raise ErrorNegocio(
+                codigo=CodigoError.NO_ENCONTRADO,
+                detalle="Cuenta no encontrada"
             )
 
         if cuenta.estado != "ACTIVA":
-            raise HTTPException(
-                status_code=409,
-                detail="No puedes editar una cuenta inactiva"
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle="No puedes editar una cuenta inactiva"
             )
 
         if "nombre_cuenta" in cambios:
@@ -181,9 +182,9 @@ def actualizar_cuenta_financiera(
                 existente is not None
                 and existente.id_cuenta != cuenta.id_cuenta
             ):
-                raise HTTPException(
-                    status_code=409,
-                    detail=(
+                raise ErrorNegocio(
+                    codigo=CodigoError.CONFLICTO,
+                    detalle=(
                         "Ya tienes otra cuenta "
                         "con ese nombre"
                     )
@@ -195,7 +196,7 @@ def actualizar_cuenta_financiera(
             cuenta.institucion = cambios["institucion"]
 
         db.commit()
-        db.refresh(cuenta)
+        refrescar_entidad(db, cuenta)
 
         return cuenta
 
@@ -217,15 +218,15 @@ def desactivar_cuenta_financiera(
         )
 
         if cuenta is None:
-            raise HTTPException(
-                status_code=404,
-                detail="Cuenta no encontrada"
+            raise ErrorNegocio(
+                codigo=CodigoError.NO_ENCONTRADO,
+                detalle="Cuenta no encontrada"
             )
 
         if cuenta.estado not in ("ACTIVA", "INACTIVA"):
-            raise HTTPException(
-                status_code=409,
-                detail="Estado de cuenta no válido"
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle="Estado de cuenta no válido"
             )
 
         if cuenta.estado == "ACTIVA":
@@ -241,9 +242,9 @@ def desactivar_cuenta_financiera(
             ]
 
             if reservado > CERO:
-                raise HTTPException(
-                    status_code=409,
-                    detail=(
+                raise ErrorNegocio(
+                    codigo=CodigoError.CONFLICTO,
+                    detalle=(
                         "No puedes desactivar una cuenta "
                         "que tiene dinero reservado "
                         "para metas de ahorro. "
@@ -253,9 +254,9 @@ def desactivar_cuenta_financiera(
                 )
 
             if reservado < CERO:
-                raise HTTPException(
-                    status_code=409,
-                    detail="La cuenta tiene reservas inconsistentes"
+                raise ErrorNegocio(
+                    codigo=CodigoError.CONFLICTO,
+                    detalle="La cuenta tiene reservas inconsistentes"
                 )
 
             saldo_real = disponibilidad[
@@ -263,9 +264,9 @@ def desactivar_cuenta_financiera(
             ]
 
             if saldo_real != CERO:
-                raise HTTPException(
-                    status_code=409,
-                    detail=(
+                raise ErrorNegocio(
+                    codigo=CodigoError.CONFLICTO,
+                    detalle=(
                         "No puedes desactivar una cuenta "
                         "con saldo diferente de cero. "
                         f"Saldo actual: {saldo_real:.2f}"
@@ -275,7 +276,7 @@ def desactivar_cuenta_financiera(
             cuenta.estado = "INACTIVA"
 
         db.commit()
-        db.refresh(cuenta)
+        refrescar_entidad(db, cuenta)
 
         return cuenta
 

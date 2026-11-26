@@ -12,7 +12,7 @@ from app.models import (
     MetaFinanciera,
 )
 
-from app.services import (
+from app.business import (
     semantica_auto_sync as sync,
 )
 

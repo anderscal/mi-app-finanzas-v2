@@ -1,7 +1,7 @@
 
 from decimal import Decimal, ROUND_HALF_UP
 
-from fastapi import HTTPException
+from app.business.errores import CodigoError, ErrorNegocio
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -92,9 +92,9 @@ def _validar_reintento(
         return None
 
     if not misma_solicitud(existente, datos):
-        raise HTTPException(
-            status_code=409,
-            detail="UUID utilizado por otra operación",
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="UUID utilizado por otra operación",
         )
 
     cuenta = bloquear_cuenta(
@@ -104,15 +104,15 @@ def _validar_reintento(
     )
 
     if cuenta is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Movimiento no encontrado",
+        raise ErrorNegocio(
+            codigo=CodigoError.NO_ENCONTRADO,
+            detalle="Movimiento no encontrado",
         )
 
     if existente.estado != "ACTIVO":
-        raise HTTPException(
-            status_code=409,
-            detail="La operación ya no está activa",
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="La operación ya no está activa",
         )
 
     return respuesta_movimiento(
@@ -127,9 +127,9 @@ def registrar_movimiento_normal(
     datos: MovimientoNormalCrear,
 ):
     if id_usuario <= 0:
-        raise HTTPException(
-            status_code=401,
-            detail="Usuario no válido",
+        raise ErrorNegocio(
+            codigo=CodigoError.NO_AUTENTICADO,
+            detalle="Usuario no válido",
         )
 
     try:
@@ -154,15 +154,15 @@ def registrar_movimiento_normal(
         )
 
         if cuenta is None:
-            raise HTTPException(
-                status_code=404,
-                detail="Cuenta no encontrada",
+            raise ErrorNegocio(
+                codigo=CodigoError.NO_ENCONTRADO,
+                detalle="Cuenta no encontrada",
             )
 
         if cuenta.estado != "ACTIVA":
-            raise HTTPException(
-                status_code=409,
-                detail="La cuenta está inactiva",
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle="La cuenta está inactiva",
             )
 
         # 3. Reconocer una operación que
@@ -184,21 +184,21 @@ def registrar_movimiento_normal(
         )
 
         if categoria is None:
-            raise HTTPException(
-                status_code=404,
-                detail="Categoría no encontrada",
+            raise ErrorNegocio(
+                codigo=CodigoError.NO_ENCONTRADO,
+                detalle="Categoría no encontrada",
             )
 
         if categoria.estado != "ACTIVA":
-            raise HTTPException(
-                status_code=409,
-                detail="Categoría inactiva",
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle="Categoría inactiva",
             )
 
         if categoria.tipo_categoria != datos.tipo:
-            raise HTTPException(
-                status_code=422,
-                detail=(
+            raise ErrorNegocio(
+                codigo=CodigoError.VALIDACION,
+                detalle=(
                     "La categoría no corresponde "
                     "al tipo de movimiento"
                 ),
@@ -208,9 +208,9 @@ def registrar_movimiento_normal(
             categoria.es_sistema
             or categoria.id_usuario == id_usuario
         ):
-            raise HTTPException(
-                status_code=403,
-                detail="Categoría no autorizada",
+            raise ErrorNegocio(
+                codigo=CodigoError.PROHIBIDO,
+                detalle="Categoría no autorizada",
             )
 
         # 5. Calcular GMF en el backend.
@@ -259,9 +259,9 @@ def registrar_movimiento_normal(
     except IntegrityError:
         db.rollback()
 
-        raise HTTPException(
-            status_code=409,
-            detail=(
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle=(
                 "Conflicto de integridad al registrar "
                 "el movimiento"
             ),

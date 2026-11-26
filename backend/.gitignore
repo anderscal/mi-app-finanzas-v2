@@ -1,4 +1,28 @@
+# Entornos virtuales
 .venv/
+venv/
+
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+
+# Pruebas y cobertura
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Credenciales
 .env
+.env.*
+!.env.example
+!.env.test.example
+
+# Editores
+.vscode/
+.idea/
+
+# Archivos temporales
+*.log
+*.tmp

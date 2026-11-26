@@ -2,7 +2,7 @@
 from decimal import Decimal, ROUND_HALF_UP
 from uuid import NAMESPACE_URL, UUID, uuid5
 
-from fastapi import HTTPException
+from app.business.errores import CodigoError, ErrorNegocio
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -142,9 +142,9 @@ def _consultar_reintento(
         return None
 
     if salida is None or entrada is None:
-        raise HTTPException(
-            status_code=409,
-            detail=(
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle=(
                 "La transferencia presenta "
                 "movimientos inconsistentes"
             )
@@ -155,9 +155,9 @@ def _consultar_reintento(
         or salida.id_transferencia
             != entrada.id_transferencia
     ):
-        raise HTTPException(
-            status_code=409,
-            detail="UUID utilizado por otra operación"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="UUID utilizado por otra operación"
         )
 
     transferencia = buscar_transferencia(
@@ -166,9 +166,9 @@ def _consultar_reintento(
     )
 
     if transferencia is None:
-        raise HTTPException(
-            status_code=409,
-            detail="Transferencia relacionada no encontrada"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="Transferencia relacionada no encontrada"
         )
 
     cuentas = bloquear_cuentas_usuario(
@@ -179,9 +179,9 @@ def _consultar_reintento(
     )
 
     if len(cuentas) != 2:
-        raise HTTPException(
-            status_code=404,
-            detail="Transferencia no encontrada"
+        raise ErrorNegocio(
+            codigo=CodigoError.NO_ENCONTRADO,
+            detalle="Transferencia no encontrada"
         )
 
     if not misma_transferencia(
@@ -191,9 +191,9 @@ def _consultar_reintento(
         entrada,
         monto_gmf
     ):
-        raise HTTPException(
-            status_code=409,
-            detail="UUID utilizado por otra operación"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="UUID utilizado por otra operación"
         )
 
     return respuesta_transferencia(
@@ -211,15 +211,15 @@ def registrar_transferencia(
     datos: TransferenciaCrear
 ):
     if id_usuario <= 0:
-        raise HTTPException(
-            status_code=401,
-            detail="Usuario no válido"
+        raise ErrorNegocio(
+            codigo=CodigoError.NO_AUTENTICADO,
+            detalle="Usuario no válido"
         )
 
     if datos.id_cuenta_origen == datos.id_cuenta_destino:
-        raise HTTPException(
-            status_code=422,
-            detail="Las cuentas deben ser diferentes"
+        raise ErrorNegocio(
+            codigo=CodigoError.VALIDACION,
+            detalle="Las cuentas deben ser diferentes"
         )
 
     uuid_salida, uuid_entrada = (
@@ -257,9 +257,9 @@ def registrar_transferencia(
         )
 
         if len(cuentas) != 2:
-            raise HTTPException(
-                status_code=404,
-                detail="Una o ambas cuentas no existen"
+            raise ErrorNegocio(
+                codigo=CodigoError.NO_ENCONTRADO,
+                detalle="Una o ambas cuentas no existen"
             )
 
         origen = cuentas[datos.id_cuenta_origen]
@@ -269,9 +269,9 @@ def registrar_transferencia(
             origen.estado != "ACTIVA"
             or destino.estado != "ACTIVA"
         ):
-            raise HTTPException(
-                status_code=409,
-                detail="Ambas cuentas deben estar activas"
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle="Ambas cuentas deben estar activas"
             )
 
         # Reintento tras esperar los bloqueos.
@@ -367,9 +367,9 @@ def registrar_transferencia(
 
     except IntegrityError:
         db.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail=(
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle=(
                 "Conflicto de integridad al registrar "
                 "la transferencia"
             )

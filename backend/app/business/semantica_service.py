@@ -5,22 +5,12 @@ from collections import defaultdict
 from datetime import datetime, time, timezone
 from decimal import Decimal
 
-from fastapi import HTTPException
+from app.business.errores import CodigoError, ErrorNegocio
 from rdflib import Graph, Literal, Namespace, RDF, URIRef
 from rdflib.namespace import XSD
-from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.models import (
-    CategoriaMovimiento,
-    CuentaFinanciera,
-    MetaFinanciera,
-    Movimiento,
-    ObligacionFinanciera,
-    Presupuesto,
-    Transferencia,
-)
-from app.models.aporte_meta import AporteMeta
+from app.persistence import semantica_exportacion_repository as exportacion
 from app.persistence.cuenta_repository import obtener_cuentas_con_saldo
 
 FIN = Namespace(
@@ -69,44 +59,28 @@ def construir_grafo_usuario(db: Session, id_usuario: int) -> tuple[Graph, dict]:
         datetime.now(timezone.utc).isoformat(), datatype=XSD.dateTime
     )))
 
-    cuentas = list(db.scalars(
-        select(CuentaFinanciera)
-        .where(CuentaFinanciera.id_usuario == id_usuario)
-        .order_by(CuentaFinanciera.id_cuenta)
-    ))
+    cuentas = exportacion.obtener_cuentas(db, id_usuario)
     ids_cuentas = {cu.id_cuenta for cu in cuentas}
     saldos = {
         int(fila['id_cuenta']): Decimal(fila['saldo_actual'])
         for fila in obtener_cuentas_con_saldo(db, id_usuario)
     }
 
-    metas = list(db.scalars(
-        select(MetaFinanciera)
-        .where(MetaFinanciera.id_usuario == id_usuario)
-        .order_by(MetaFinanciera.id_meta)
-    ))
+    metas = exportacion.obtener_metas(db, id_usuario)
     ids_metas = {meta.id_meta for meta in metas}
-    obligaciones = list(db.scalars(
-        select(ObligacionFinanciera)
-        .where(ObligacionFinanciera.id_usuario == id_usuario)
-        .order_by(ObligacionFinanciera.id_obligacion)
-    ))
+    obligaciones = exportacion.obtener_obligaciones(db, id_usuario)
     ids_obligaciones = {ob.id_obligacion for ob in obligaciones}
 
-    aportes = list(db.scalars(
-        select(AporteMeta)
-        .where(AporteMeta.id_usuario == id_usuario)
-        .order_by(AporteMeta.id_aporte)
-    ))
+    aportes = exportacion.obtener_aportes(db, id_usuario)
     reservados = defaultdict(lambda: CERO)
     vinculados = defaultdict(lambda: CERO)
     for aporte in aportes:
         if aporte.id_cuenta not in ids_cuentas or aporte.id_meta not in ids_metas:
-            raise HTTPException(409, 'Reserva asociada a cuenta o meta ajena')
+            raise ErrorNegocio(CodigoError.CONFLICTO, 'Reserva asociada a cuenta o meta ajena')
         if aporte.estado != 'ACTIVO':
             continue
         if aporte.tipo not in ('RESERVA', 'LIBERACION'):
-            raise HTTPException(409, 'Tipo de aporte inconsistente')
+            raise ErrorNegocio(CodigoError.CONFLICTO, 'Tipo de aporte inconsistente')
         delta = Decimal(aporte.monto)
         if aporte.tipo == 'LIBERACION':
             delta = -delta
@@ -117,7 +91,7 @@ def construir_grafo_usuario(db: Session, id_usuario: int) -> tuple[Graph, dict]:
         real = saldos[cuenta.id_cuenta]
         reservado = reservados[cuenta.id_cuenta]
         if reservado < 0 or reservado > real:
-            raise HTTPException(409, 'Saldo reservado inconsistente; revisa la cuenta')
+            raise ErrorNegocio(CodigoError.CONFLICTO, 'Saldo reservado inconsistente; revisa la cuenta')
         sujeto = _recurso(id_usuario, 'cuenta', cuenta.id_cuenta)
         g.add((usuario, FIN.tieneCuenta, sujeto))
         g.add((sujeto, RDF.type, FIN.CuentaFinanciera))
@@ -129,14 +103,7 @@ def construir_grafo_usuario(db: Session, id_usuario: int) -> tuple[Graph, dict]:
         g.add((sujeto, FIN.tieneMontoReservado, _dinero(reservado)))
         g.add((sujeto, FIN.tieneSaldoLibre, _dinero(real - reservado)))
 
-    categorias = list(db.scalars(
-        select(CategoriaMovimiento)
-        .where(or_(
-            CategoriaMovimiento.id_usuario == id_usuario,
-            CategoriaMovimiento.es_sistema.is_(True),
-        ))
-        .order_by(CategoriaMovimiento.id_categoria)
-    ))
+    categorias = exportacion.obtener_categorias(db, id_usuario)
     ids_categorias = {c.id_categoria for c in categorias}
     for categoria in categorias:
         sujeto = _recurso(id_usuario, 'categoria', categoria.id_categoria)
@@ -145,17 +112,12 @@ def construir_grafo_usuario(db: Session, id_usuario: int) -> tuple[Graph, dict]:
         elif categoria.tipo_categoria == 'INGRESO':
             clase = FIN.CategoriaIngreso
         else:
-            raise HTTPException(409, 'Tipo de categoría inconsistente')
+            raise ErrorNegocio(CodigoError.CONFLICTO, 'Tipo de categoría inconsistente')
         g.add((sujeto, RDF.type, clase))
         g.add((sujeto, FIN.tieneNombreCategoria, _texto(categoria.nombre_categoria)))
         g.add((sujeto, OP.estado, _texto(categoria.estado)))
 
-    movimientos = list(db.scalars(
-        select(Movimiento)
-        .join(CuentaFinanciera, Movimiento.id_cuenta == CuentaFinanciera.id_cuenta)
-        .where(CuentaFinanciera.id_usuario == id_usuario)
-        .order_by(Movimiento.id_movimiento)
-    ))
+    movimientos = exportacion.obtener_movimientos(db, id_usuario)
     for movimiento in movimientos:
         sujeto = _recurso(id_usuario, 'movimiento', movimiento.id_movimiento)
         if movimiento.origen == 'NORMAL':
@@ -168,13 +130,13 @@ def construir_grafo_usuario(db: Session, id_usuario: int) -> tuple[Graph, dict]:
         )))
         if movimiento.id_categoria is not None:
             if movimiento.id_categoria not in ids_categorias:
-                raise HTTPException(409, 'Movimiento vinculado a categoría no autorizada')
+                raise ErrorNegocio(CodigoError.CONFLICTO, 'Movimiento vinculado a categoría no autorizada')
             g.add((sujeto, FIN.perteneceACategoria, _recurso(
                 id_usuario, 'categoria', movimiento.id_categoria
             )))
         if movimiento.id_obligacion is not None:
             if movimiento.id_obligacion not in ids_obligaciones:
-                raise HTTPException(409, 'Movimiento vinculado a obligación ajena')
+                raise ErrorNegocio(CodigoError.CONFLICTO, 'Movimiento vinculado a obligación ajena')
             g.add((sujeto, FIN.relacionadoConObligacion, _recurso(
                 id_usuario, 'obligacion', movimiento.id_obligacion
             )))
@@ -185,16 +147,10 @@ def construir_grafo_usuario(db: Session, id_usuario: int) -> tuple[Graph, dict]:
         g.add((sujeto, OP.tipoMovimiento, _texto(movimiento.tipo)))
         g.add((sujeto, OP.montoGMF, _dinero(movimiento.monto_gmf)))
 
-    transferencias = list(db.scalars(
-        select(Transferencia)
-        .join(CuentaFinanciera,
-              Transferencia.id_cuenta_origen == CuentaFinanciera.id_cuenta)
-        .where(CuentaFinanciera.id_usuario == id_usuario)
-        .order_by(Transferencia.id_transferencia)
-    ))
+    transferencias = exportacion.obtener_transferencias(db, id_usuario)
     for tr in transferencias:
         if tr.id_cuenta_destino not in ids_cuentas:
-            raise HTTPException(409, 'Transferencia entre propietarios diferentes')
+            raise ErrorNegocio(CodigoError.CONFLICTO, 'Transferencia entre propietarios diferentes')
         sujeto = _recurso(id_usuario, 'transferencia', tr.id_transferencia)
         g.add((sujeto, RDF.type, FIN.Transferencia))
         g.add((sujeto, FIN.tieneCuentaOrigen, _recurso(
@@ -210,7 +166,7 @@ def construir_grafo_usuario(db: Session, id_usuario: int) -> tuple[Graph, dict]:
         ligado = vinculados[meta.id_meta]
         antiguo = Decimal(meta.monto_acumulado) - ligado
         if ligado < 0 or antiguo < 0:
-            raise HTTPException(409, 'Acumulado de meta inconsistente')
+            raise ErrorNegocio(CodigoError.CONFLICTO, 'Acumulado de meta inconsistente')
         sujeto = _recurso(id_usuario, 'meta', meta.id_meta)
         g.add((usuario, FIN.tieneMeta, sujeto))
         g.add((sujeto, RDF.type, FIN.MetaFinanciera))
@@ -223,7 +179,7 @@ def construir_grafo_usuario(db: Session, id_usuario: int) -> tuple[Graph, dict]:
 
     for aporte in aportes:
         if aporte.tipo not in ('RESERVA', 'LIBERACION'):
-            raise HTTPException(409, 'Tipo de aporte inconsistente')
+            raise ErrorNegocio(CodigoError.CONFLICTO, 'Tipo de aporte inconsistente')
         sujeto = _recurso(id_usuario, 'aporte', aporte.id_aporte)
         clase = FIN.ReservaMeta if aporte.tipo == 'RESERVA' else FIN.LiberacionMeta
         g.add((sujeto, RDF.type, clase))
@@ -249,14 +205,10 @@ def construir_grafo_usuario(db: Session, id_usuario: int) -> tuple[Graph, dict]:
         g.add((sujeto, FIN.tieneMontoOriginal, _dinero(ob.monto_original)))
         g.add((sujeto, OP.estado, _texto(ob.estado)))
 
-    presupuestos = list(db.scalars(
-        select(Presupuesto)
-        .where(Presupuesto.id_usuario == id_usuario)
-        .order_by(Presupuesto.id_presupuesto)
-    ))
+    presupuestos = exportacion.obtener_presupuestos(db, id_usuario)
     for p in presupuestos:
         if p.id_categoria not in ids_categorias:
-            raise HTTPException(409, 'Presupuesto vinculado a categoría no autorizada')
+            raise ErrorNegocio(CodigoError.CONFLICTO, 'Presupuesto vinculado a categoría no autorizada')
         sujeto = _recurso(id_usuario, 'presupuesto', p.id_presupuesto)
         g.add((usuario, FIN.tienePresupuesto, sujeto))
         g.add((sujeto, RDF.type, FIN.Presupuesto))

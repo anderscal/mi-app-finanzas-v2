@@ -16,14 +16,14 @@ import getpass
 from collections import defaultdict
 from decimal import Decimal
 
-from fastapi import HTTPException
+from app.business.errores import ErrorNegocio
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.persistence.database import engine
 
-from app.services.auth_service import (
+from app.business.auth_business_service import (
     obtener_usuario_actual,
 )
 
@@ -318,7 +318,7 @@ def main():
 
             return resultado
 
-    except HTTPException:
+    except ErrorNegocio:
 
         print(
             "JWT no valido o vencido. "

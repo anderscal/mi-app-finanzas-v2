@@ -1,7 +1,8 @@
 
 from decimal import Decimal, ROUND_HALF_UP
 
-from fastapi import HTTPException
+from app.persistence.unidad_trabajo_repository import refrescar_entidad
+from app.business.errores import CodigoError, ErrorNegocio
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -54,9 +55,9 @@ def consultar_detalle_obligacion(
     )
 
     if obligacion is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Obligación no encontrada"
+        raise ErrorNegocio(
+            codigo=CodigoError.NO_ENCONTRADO,
+            detalle="Obligación no encontrada"
         )
 
     return obligacion
@@ -72,9 +73,9 @@ def _bloquear_propietario(
     )
 
     if usuario is None:
-        raise HTTPException(
-            status_code=401,
-            detail="Usuario no válido"
+        raise ErrorNegocio(
+            codigo=CodigoError.NO_AUTENTICADO,
+            detalle="Usuario no válido"
         )
 
 
@@ -90,9 +91,9 @@ def _bloquear_obligacion_propia(
     )
 
     if obligacion is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Obligación no encontrada"
+        raise ErrorNegocio(
+            codigo=CodigoError.NO_ENCONTRADO,
+            detalle="Obligación no encontrada"
         )
 
     return obligacion
@@ -107,9 +108,9 @@ def _tipo_movimiento_inicial(
     if tipo_obligacion == "POR_COBRAR":
         return "GASTO"
 
-    raise HTTPException(
-        status_code=422,
-        detail="Tipo de obligación no válido"
+    raise ErrorNegocio(
+        codigo=CodigoError.VALIDACION,
+        detalle="Tipo de obligación no válido"
     )
 
 
@@ -144,13 +145,14 @@ def _buscar_creacion_existente(
         return None
 
     if movimiento.id_obligacion is None:
-        raise HTTPException(
-            status_code=409,
-            detail="UUID utilizado por otra operación"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="UUID utilizado por otra operación"
         )
 
-    obligacion = db.get(
-        ObligacionFinanciera,
+    obligacion = obtener_obligacion_usuario(
+        db,
+        id_usuario,
         movimiento.id_obligacion
     )
 
@@ -158,9 +160,9 @@ def _buscar_creacion_existente(
         obligacion is None
         or obligacion.id_usuario != id_usuario
     ):
-        raise HTTPException(
-            status_code=409,
-            detail="UUID utilizado por otra operación"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="UUID utilizado por otra operación"
         )
 
     coincide = (
@@ -198,9 +200,9 @@ def _buscar_creacion_existente(
     )
 
     if not coincide:
-        raise HTTPException(
-            status_code=409,
-            detail="UUID ya utilizado con datos diferentes"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="UUID ya utilizado con datos diferentes"
         )
 
     return obligacion
@@ -235,9 +237,9 @@ def crear_obligacion_financiera(
         )
 
         if duplicada is not None:
-            raise HTTPException(
-                status_code=409,
-                detail=(
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle=(
                     "Ya existe una obligación "
                     "con ese nombre y tipo"
                 )
@@ -254,15 +256,15 @@ def crear_obligacion_financiera(
             )
 
             if cuenta is None:
-                raise HTTPException(
-                    status_code=404,
-                    detail="Cuenta no encontrada"
+                raise ErrorNegocio(
+                    codigo=CodigoError.NO_ENCONTRADO,
+                    detalle="Cuenta no encontrada"
                 )
 
             if cuenta.estado != "ACTIVA":
-                raise HTTPException(
-                    status_code=409,
-                    detail="La cuenta está inactiva"
+                raise ErrorNegocio(
+                    codigo=CodigoError.CONFLICTO,
+                    detalle="La cuenta está inactiva"
                 )
 
             monto_gmf = _gmf_inicial(
@@ -330,15 +332,15 @@ def crear_obligacion_financiera(
             )
 
         db.commit()
-        db.refresh(obligacion)
+        refrescar_entidad(db, obligacion)
 
         return obligacion
 
     except IntegrityError:
         db.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail=(
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle=(
                 "Conflicto de integridad al crear "
                 "la obligación"
             )
@@ -360,9 +362,9 @@ def actualizar_obligacion_financiera(
     )
 
     if not cambios:
-        raise HTTPException(
-            status_code=422,
-            detail="Indica al menos un campo para editar"
+        raise ErrorNegocio(
+            codigo=CodigoError.VALIDACION,
+            detalle="Indica al menos un campo para editar"
         )
 
     try:
@@ -378,9 +380,9 @@ def actualizar_obligacion_financiera(
         )
 
         if obligacion.estado != "ACTIVA":
-            raise HTTPException(
-                status_code=409,
-                detail=(
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle=(
                     "Solo pueden editarse "
                     "obligaciones activas"
                 )
@@ -398,9 +400,9 @@ def actualizar_obligacion_financiera(
             )
 
             if duplicada is not None:
-                raise HTTPException(
-                    status_code=409,
-                    detail=(
+                raise ErrorNegocio(
+                    codigo=CodigoError.CONFLICTO,
+                    detalle=(
                         "Ya existe otra obligación "
                         "con ese nombre y tipo"
                     )
@@ -415,9 +417,9 @@ def actualizar_obligacion_financiera(
                 vencimiento is not None
                 and vencimiento < obligacion.fecha_inicio
             ):
-                raise HTTPException(
-                    status_code=422,
-                    detail=(
+                raise ErrorNegocio(
+                    codigo=CodigoError.VALIDACION,
+                    detalle=(
                         "El vencimiento no puede "
                         "ser anterior al inicio"
                     )
@@ -429,15 +431,15 @@ def actualizar_obligacion_financiera(
             obligacion.descripcion = cambios["descripcion"]
 
         db.commit()
-        db.refresh(obligacion)
+        refrescar_entidad(db, obligacion)
 
         return obligacion
 
     except IntegrityError:
         db.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail="Conflicto al editar la obligación"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="Conflicto al editar la obligación"
         )
 
     except Exception:
@@ -464,13 +466,13 @@ def desactivar_obligacion_financiera(
 
         if obligacion.estado == "INACTIVA":
             db.commit()
-            db.refresh(obligacion)
+            refrescar_entidad(db, obligacion)
             return obligacion
 
         if obligacion.estado != "ACTIVA":
-            raise HTTPException(
-                status_code=409,
-                detail=(
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle=(
                     "No se puede desactivar "
                     "una obligación saldada"
                 )
@@ -480,9 +482,9 @@ def desactivar_obligacion_financiera(
             db,
             id_obligacion
         ) > 0:
-            raise HTTPException(
-                status_code=409,
-                detail=(
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle=(
                     "No puedes desactivar una obligación "
                     "con movimientos financieros activos"
                 )
@@ -491,15 +493,15 @@ def desactivar_obligacion_financiera(
         obligacion.estado = "INACTIVA"
 
         db.commit()
-        db.refresh(obligacion)
+        refrescar_entidad(db, obligacion)
 
         return obligacion
 
     except IntegrityError:
         db.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail=(
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle=(
                 "Conflicto al desactivar la obligación"
             )
         )

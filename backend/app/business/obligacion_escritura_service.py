@@ -1,7 +1,7 @@
 
 from decimal import Decimal
 
-from fastapi import HTTPException
+from app.business.errores import CodigoError, ErrorNegocio
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -34,9 +34,9 @@ def tipo_abono_obligacion(obligacion) -> str:
     if obligacion.tipo_obligacion == "POR_COBRAR":
         return "INGRESO"
 
-    raise HTTPException(
-        status_code=409,
-        detail="Tipo de obligación no válido"
+    raise ErrorNegocio(
+        codigo=CodigoError.CONFLICTO,
+        detalle="Tipo de obligación no válido"
     )
 
 
@@ -107,9 +107,9 @@ def registrar_abono_obligacion(
     datos: AbonoObligacionCrear
 ):
     if id_usuario <= 0:
-        raise HTTPException(
-            status_code=401,
-            detail="Usuario no válido"
+        raise ErrorNegocio(
+            codigo=CodigoError.NO_AUTENTICADO,
+            detalle="Usuario no válido"
         )
 
     try:
@@ -122,9 +122,9 @@ def registrar_abono_obligacion(
         )
 
         if obligacion is None:
-            raise HTTPException(
-                status_code=404,
-                detail="Obligación no encontrada"
+            raise ErrorNegocio(
+                codigo=CodigoError.NO_ENCONTRADO,
+                detalle="Obligación no encontrada"
             )
 
         tipo = tipo_abono_obligacion(
@@ -145,9 +145,9 @@ def registrar_abono_obligacion(
                 datos,
                 tipo
             ):
-                raise HTTPException(
-                    status_code=409,
-                    detail="UUID utilizado por otra operación"
+                raise ErrorNegocio(
+                    codigo=CodigoError.CONFLICTO,
+                    detalle="UUID utilizado por otra operación"
                 )
 
             pendiente = calcular_pendiente(
@@ -166,9 +166,9 @@ def registrar_abono_obligacion(
             return resultado
 
         if obligacion.estado != "ACTIVA":
-            raise HTTPException(
-                status_code=409,
-                detail="La obligación no está activa"
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle="La obligación no está activa"
             )
 
         # Bloqueo de la cuenta del abono.
@@ -179,15 +179,15 @@ def registrar_abono_obligacion(
         )
 
         if cuenta is None:
-            raise HTTPException(
-                status_code=404,
-                detail="Cuenta no encontrada"
+            raise ErrorNegocio(
+                codigo=CodigoError.NO_ENCONTRADO,
+                detalle="Cuenta no encontrada"
             )
 
         if cuenta.estado != "ACTIVA":
-            raise HTTPException(
-                status_code=409,
-                detail="La cuenta está inactiva"
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle="La cuenta está inactiva"
             )
 
         # Revisar nuevamente la idempotencia.
@@ -202,9 +202,9 @@ def registrar_abono_obligacion(
                 datos,
                 tipo
             ):
-                raise HTTPException(
-                    status_code=409,
-                    detail="UUID utilizado por otra operación"
+                raise ErrorNegocio(
+                    codigo=CodigoError.CONFLICTO,
+                    detalle="UUID utilizado por otra operación"
                 )
 
             pendiente = calcular_pendiente(
@@ -228,15 +228,15 @@ def registrar_abono_obligacion(
         )
 
         if pendiente_actual <= CERO:
-            raise HTTPException(
-                status_code=409,
-                detail="La obligación ya está saldada"
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle="La obligación ya está saldada"
             )
 
         if datos.monto > pendiente_actual:
-            raise HTTPException(
-                status_code=409,
-                detail="El abono supera el monto pendiente"
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle="El abono supera el monto pendiente"
             )
 
         # POR_PAGAR: el pago sale de la cuenta.
@@ -289,9 +289,9 @@ def registrar_abono_obligacion(
     except IntegrityError:
         db.rollback()
 
-        raise HTTPException(
-            status_code=409,
-            detail=(
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle=(
                 "Conflicto de integridad al registrar "
                 "el abono"
             )

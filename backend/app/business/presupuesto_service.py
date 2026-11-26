@@ -1,5 +1,6 @@
 
-from fastapi import HTTPException
+from app.persistence.unidad_trabajo_repository import refrescar_entidad
+from app.business.errores import CodigoError, ErrorNegocio
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -40,9 +41,9 @@ def _validar_usuario(
     )
 
     if usuario is None:
-        raise HTTPException(
-            status_code=401,
-            detail="Usuario no válido"
+        raise ErrorNegocio(
+            codigo=CodigoError.NO_AUTENTICADO,
+            detalle="Usuario no válido"
         )
 
 
@@ -57,9 +58,9 @@ def _validar_categoria(
     )
 
     if categoria is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Categoría no encontrada"
+        raise ErrorNegocio(
+            codigo=CodigoError.NO_ENCONTRADO,
+            detalle="Categoría no encontrada"
         )
 
     es_global = (
@@ -73,21 +74,21 @@ def _validar_categoria(
     )
 
     if not (es_global or es_personal):
-        raise HTTPException(
-            status_code=404,
-            detail="Categoría no encontrada"
+        raise ErrorNegocio(
+            codigo=CodigoError.NO_ENCONTRADO,
+            detalle="Categoría no encontrada"
         )
 
     if categoria.estado != "ACTIVA":
-        raise HTTPException(
-            status_code=409,
-            detail="La categoría está inactiva"
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle="La categoría está inactiva"
         )
 
     if categoria.tipo_categoria != "GASTO":
-        raise HTTPException(
-            status_code=422,
-            detail=(
+        raise ErrorNegocio(
+            codigo=CodigoError.VALIDACION,
+            detalle=(
                 "Los presupuestos solo pueden "
                 "asociarse a categorías de gasto"
             )
@@ -122,9 +123,9 @@ def crear_presupuesto_financiero(
         )
 
         if duplicado is not None:
-            raise HTTPException(
-                status_code=409,
-                detail=(
+            raise ErrorNegocio(
+                codigo=CodigoError.CONFLICTO,
+                detalle=(
                     "Ya existe un presupuesto para "
                     "esta categoría y período"
                 )
@@ -144,16 +145,16 @@ def crear_presupuesto_financiero(
         )
 
         db.commit()
-        db.refresh(presupuesto)
+        refrescar_entidad(db, presupuesto)
 
         return presupuesto
 
     except IntegrityError:
         db.rollback()
 
-        raise HTTPException(
-            status_code=409,
-            detail=(
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle=(
                 "Conflicto de integridad al crear "
                 "el presupuesto"
             )
@@ -183,24 +184,24 @@ def actualizar_presupuesto_financiero(
         )
 
         if presupuesto is None:
-            raise HTTPException(
-                status_code=404,
-                detail="Presupuesto no encontrado"
+            raise ErrorNegocio(
+                codigo=CodigoError.NO_ENCONTRADO,
+                detalle="Presupuesto no encontrado"
             )
 
         presupuesto.monto_limite = datos.monto_limite
 
         db.commit()
-        db.refresh(presupuesto)
+        refrescar_entidad(db, presupuesto)
 
         return presupuesto
 
     except IntegrityError:
         db.rollback()
 
-        raise HTTPException(
-            status_code=409,
-            detail=(
+        raise ErrorNegocio(
+            codigo=CodigoError.CONFLICTO,
+            detalle=(
                 "Conflicto de integridad al actualizar "
                 "el presupuesto"
             )
