@@ -209,7 +209,6 @@
 :root[data-tema="oscuro"] .banda { background: #0C5A42; }
 :root[data-tema="oscuro"] .banda.banda-oscura { background: #08402F; }
 :root[data-tema="oscuro"] #toast { background: #2A3833; color: #F1F6F3; }
-:root[data-tema="oscuro"] .ocultar-montos .monto { text-shadow: 0 0 10px rgba(228,236,232,0.55); }
 :root[data-tema="oscuro"] input,
 :root[data-tema="oscuro"] select,
 :root[data-tema="oscuro"] textarea { color: var(--tinta); }
@@ -246,12 +245,12 @@
 
 /* Ubicación: esquina superior derecha de la franja verde */
 .banda.con-tema { position: relative; }
-.banda.con-tema > .btn-tema { position: absolute; top: 16px; right: 14px; z-index: 2; }
+.banda.con-tema > .btn-tema { position: absolute; top: calc(16px + var(--fp-top)); right: 14px; z-index: 2; }
 .banda-acciones .btn-tema { align-self: center; margin-right: 4px; }
 
 /* Pantallas sin franja (login y registro) */
 .btn-tema.flotante {
-  position: absolute; top: 14px; right: 14px; z-index: 5;
+  position: absolute; top: calc(14px + var(--fp-top)); right: 14px; z-index: 5;
   border-color: var(--linea); background: var(--gris); color: var(--tinta);
 }
 

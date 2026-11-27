@@ -916,10 +916,11 @@ export async function render(c) {
   // ----------------------------------
 
   function pintarMetas() {
-    if (!metas.length) {
+    const visibles = metas.filter(meta => meta.estado !== 'INACTIVA');
+    if (!visibles.length) {
       listaMetas.innerHTML = `
         <p class="vacio">
-          Aún no tienes metas.
+          No tienes metas visibles.
           Usa «Nueva meta» para comenzar.
         </p>
       `;
@@ -927,7 +928,7 @@ export async function render(c) {
       return;
     }
 
-    listaMetas.innerHTML = metas.map(meta => {
+    listaMetas.innerHTML = visibles.map(meta => {
       const id = Number(meta.id_meta);
       const acumulado = num(meta.monto_acumulado);
       const objetivo = num(meta.monto_objetivo);

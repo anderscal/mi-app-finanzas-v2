@@ -74,8 +74,7 @@ code { font-size: 12px; background: var(--gris); padding: 1px 5px; border-radius
 .pildora-oro { background: var(--oro); color: var(--oro-tinta); padding: 4px 10px; border-radius: 999px; font-weight: 800; }
 
 /* Ocultar saldos con el ojo */
-.ocultar-montos .monto { color: transparent !important; text-shadow: 0 0 10px rgba(20,32,28,0.5); user-select: none; }
-.ocultar-montos .banda .monto { text-shadow: 0 0 12px rgba(255,255,255,0.8); }
+.ocultar-montos .monto { user-select: none; }
 
 /* ---------- Acciones rápidas ---------- */
 .acciones { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 20px 8px 0; }
@@ -329,4 +328,81 @@ a.pildora-oro { text-decoration: none; }
 
 .gmf[hidden] {
   display: none !important;
+}
+
+/* Ajustes PWA: areas seguras y controles nativos. */
+
+:root {
+  --fp-top: env(safe-area-inset-top, 0px);
+  --fp-bottom: env(safe-area-inset-bottom, 0px);
+  --fp-left: env(safe-area-inset-left, 0px);
+  --fp-right: env(safe-area-inset-right, 0px);
+  --fp-barra: var(--marca);
+}
+
+:root[data-tema="oscuro"] {
+  --fp-barra: #0C5A42;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+.marco {
+  min-height: 100dvh;
+  padding-left: var(--fp-left);
+  padding-right: var(--fp-right);
+  padding-bottom: var(--fp-bottom);
+}
+
+.banda {
+  padding-top: calc(18px + var(--fp-top));
+}
+
+.auth {
+  padding-top: calc(48px + var(--fp-top));
+}
+
+body.con-nav .marco {
+  padding-bottom: calc(96px + var(--fp-bottom));
+}
+
+#nav {
+  height: calc(84px + var(--fp-bottom));
+  padding-bottom: calc(16px + var(--fp-bottom));
+  padding-left: calc(6px + var(--fp-left));
+  padding-right: calc(6px + var(--fp-right));
+}
+
+#toast {
+  bottom: calc(100px + var(--fp-bottom));
+}
+
+@media (display-mode: standalone) and (max-width: 480px) {
+  html, body {
+    background-color: var(--fp-barra);
+  }
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  -webkit-appearance: auto;
+  appearance: auto;
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  margin: 2px 0 0;
+  background: none;
+  accent-color: var(--marca);
+  flex: none;
+}
+
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible {
+  outline: 2px solid var(--marca);
+  outline-offset: 2px;
 }

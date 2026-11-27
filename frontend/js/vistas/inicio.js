@@ -722,9 +722,59 @@ export async function render(c) {
   `;
 
 
-  if (saldosOcultos()) {
-    c.classList.add('ocultar-montos');
+  const originales = new WeakMap();
+  const ojo = c.querySelector('#btn-ocultar');
+
+  function actualizarMascara() {
+
+    const ocultar = c.classList.contains('ocultar-montos');
+
+    ojo.setAttribute('aria-pressed', String(ocultar));
+
+    for (const el of c.querySelectorAll('.monto')) {
+
+      const texto = el.textContent.trim();
+
+      if (ocultar) {
+
+        if (/\d/.test(texto)) {
+
+          originales.set(el, el.textContent);
+          el.textContent = '******';
+
+        } else if (texto !== '******') {
+
+          originales.delete(el);
+        }
+
+      } else {
+
+        if (texto === '******' && originales.has(el)) {
+
+          el.textContent = originales.get(el);
+        }
+
+        originales.delete(el);
+      }
+    }
   }
+
+  c.classList.toggle(
+    'ocultar-montos',
+    saldosOcultos()
+  );
+
+  actualizarMascara();
+
+  const observadorMontos = new MutationObserver(
+    actualizarMascara
+  );
+
+  observadorMontos.observe(c, {
+    childList: true,
+    subtree: true,
+    characterData: true
+  });
 
   c.querySelector('#btn-ocultar')
     .addEventListener('click', () => {
@@ -736,6 +786,7 @@ export async function render(c) {
         'ocultar-montos',
         ocultar
       );
+      actualizarMascara();
 
       try {
         localStorage.setItem(
@@ -861,7 +912,7 @@ async function pintarCuentas(c) {
   if (!mismaSesion()) return;
 
   const cuentas = Array.isArray(datos.cuentas)
-    ? datos.cuentas
+    ? datos.cuentas.filter(cuenta => cuenta.estado !== 'INACTIVA')
     : [];
 
   const saldoGeneral = Number(datos.saldo_general);
@@ -955,7 +1006,7 @@ async function pintarCuentas(c) {
   if (!cuentas.length) {
     caja.innerHTML = `
       <div class="vacio">
-        <p>No tienes cuentas financieras.</p>
+        <p>No tienes cuentas financieras activas.</p>
 
         <a href="#/nueva-cuenta">
           Crear mi primera cuenta

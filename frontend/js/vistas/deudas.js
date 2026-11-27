@@ -573,8 +573,10 @@ export async function render(c) {
     }
 
 
+    const visibles = obligaciones.filter(o => o.estado !== 'INACTIVA');
+
     function grupo(titulo, tipo) {
-      const lista = obligaciones.filter(
+      const lista = visibles.filter(
         o => o.tipo_obligacion === tipo
       );
 
@@ -608,7 +610,7 @@ export async function render(c) {
       }
 
       ${
-        obligaciones.length
+        visibles.length
           ? (
               grupo('Por pagar', 'POR_PAGAR') +
               grupo('Por cobrar', 'POR_COBRAR')
@@ -616,7 +618,7 @@ export async function render(c) {
           : `
             <section class="seccion">
               <p class="vacio">
-                Aún no tienes obligaciones registradas.
+                No tienes obligaciones visibles.
                 Utiliza Nueva obligación para comenzar.
               </p>
             </section>

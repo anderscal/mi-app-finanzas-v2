@@ -92,6 +92,8 @@ export async function render(c) {
         <p class="nota">
           El saldo inicial representa el dinero
           que ya tienes al registrar la cuenta.
+          Podrás editar el nombre y la institución más adelante.
+          El tipo y el saldo inicial no se podrán modificar.
         </p>
 
         <p

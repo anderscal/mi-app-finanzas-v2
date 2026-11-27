@@ -318,7 +318,7 @@ def test_rag_limite_individual(
 
     uid, headers = cuenta_demo
 
-    for _ in range(3):
+    for _ in range(10):
 
         r = preguntar(
             client,
@@ -332,12 +332,12 @@ def test_rag_limite_individual(
         headers,
     ).status_code == 429
 
-    assert ia_simulada == [uid, uid, uid]
+    assert ia_simulada == [uid] * 10
 
     assert cantidad(
         db_session,
         "rag",
-    ) == 3
+    ) == 10
 
 
 # ======================================
@@ -356,7 +356,7 @@ def test_rag_limite_global(
     preparar(
         db_session,
         "rag",
-        12,
+        100,
         60,
     )
 
@@ -384,7 +384,7 @@ def test_rag_limite_individual_diario(
     preparar(
         db_session,
         "rag",
-        6,
+        30,
         60,
         sujeto=seguridad._huella(
             "rag",

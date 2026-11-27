@@ -141,8 +141,9 @@ export async function render(c, parametro) {
           </div>
 
           <p class="nota">
-            El saldo inicial y el tipo de cuenta
-            no pueden modificarse desde esta pantalla.
+            Puedes modificar el nombre y la institución financiera.
+            El tipo de cuenta y el saldo inicial no se pueden
+            editar después de crearla.
           </p>
 
           <p id="ec-error" class="error-form"

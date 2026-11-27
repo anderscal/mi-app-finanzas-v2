@@ -35,7 +35,7 @@ from app.services.auth_service import (
 LIMITES = {
     "login": (60, 500, 8, 500),
     "registro": (15, 40, 15, 40),
-    "rag": (6, 12, 3, 6),
+    "rag": (30, 100, 10, 30),
 }
 
 
