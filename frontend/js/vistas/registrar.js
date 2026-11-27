@@ -65,7 +65,7 @@ export async function render(c) {
   c.innerHTML = `
     <style>
       .mov-saldos {
-        background: #eef5f1;
+        background: var(--c-bg-eef5f1);
         border-radius: 14px;
         padding: 12px 14px;
         display: flex;
@@ -88,25 +88,25 @@ export async function render(c) {
       .mov-saldos .principal {
         font-size: 15px;
         font-weight: 800;
-        color: #075640;
+        color: var(--c-tx-075640);
       }
 
       .mov-saldos .advertencia {
         font-size: 12px;
-        color: #975212;
+        color: var(--c-tx-975212);
         font-weight: 700;
         line-height: 1.5;
       }
 
       .mov-saldos .nota-saldo {
         font-size: 11px;
-        color: #59675f;
+        color: var(--c-tx-59675f);
         line-height: 1.45;
       }
 
       .mov-gmf-nota {
         font-size: 12px;
-        color: #705821;
+        color: var(--c-tx-705821);
         line-height: 1.5;
       }
     </style>

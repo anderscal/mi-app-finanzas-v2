@@ -15,7 +15,10 @@ from app.schemas.rag_schema import (
 from app.business.rag_service import (
     ErrorRAG,
     consultar_diagnostico,
-    responder_asistente,
+)
+
+from app.business.seguridad_productiva_service import (
+    responder_demo as responder_asistente,
 )
 
 

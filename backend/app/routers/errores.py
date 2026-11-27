@@ -19,6 +19,7 @@ ESTADOS_HTTP = {
     CodigoError.NO_ENCONTRADO: 404,
     CodigoError.CONFLICTO: 409,
     CodigoError.VALIDACION: 422,
+    CodigoError.LIMITE_SOLICITUDES: 429,
     CodigoError.FUENTE_NO_DISPONIBLE: 503,
     CodigoError.EVIDENCIA_INCONSISTENTE: 502,
 }

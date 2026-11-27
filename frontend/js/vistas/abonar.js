@@ -25,12 +25,28 @@ import {
   guardarCache
 } from '../util.js';
 
+import {
+  consultarReservasVisibles,
+  encontrarSaldoReserva,
+  textoEstadoSaldo
+} from '../saldo-consulta.js';
+
+import { obtenerUsuario } from '../sesion.js';
+
 
 // Pantalla de pago (POR_PAGAR)
 // o cobro de préstamo (POR_COBRAR).
 // Ruta: #/abonar/<id_obligacion>
 
 export async function render(c, idObligacion) {
+
+  const idUsuario = Number(obtenerUsuario()?.id_usuario);
+  const mismaSesion = () =>
+    Number.isSafeInteger(idUsuario) &&
+    idUsuario > 0 &&
+    Number(obtenerUsuario()?.id_usuario) === idUsuario;
+
+  if (!mismaSesion()) return;
 
   const uuidLocal = nuevoUUID();
   const id = Number(idObligacion);
@@ -52,6 +68,8 @@ export async function render(c, idObligacion) {
   try {
 
     const plan = await obtenerPlanificacion();
+
+    if (!mismaSesion()) return;
 
     guardarCache('planificacion', plan);
 
@@ -84,6 +102,8 @@ export async function render(c, idObligacion) {
       return;
     }
   }
+
+  if (!mismaSesion()) return;
 
   if (!obligacion) {
 
@@ -231,6 +251,8 @@ export async function render(c, idObligacion) {
           >
             <option value="">Cargando…</option>
           </select>
+
+          ${porPagar ? '<p class="nota" id="ab-saldo-estado"></p>' : ''}
 
         </div>
 
@@ -438,6 +460,8 @@ export async function render(c, idObligacion) {
 
       datos = await obtenerMisCuentas();
 
+      if (!mismaSesion()) return;
+
       guardarCache('cuentas', datos);
 
     } catch (e) {
@@ -459,13 +483,40 @@ export async function render(c, idObligacion) {
       x => x.estado === 'ACTIVA'
     );
 
+    let consulta = null;
+
+    if (porPagar) {
+      try {
+        consulta = await consultarReservasVisibles();
+      } catch (e) {
+        // Sin reservas verificables, no mostrar saldo real como libre.
+      }
+    }
+
+    if (!mismaSesion()) return;
+
+    const estadoSaldo = c.querySelector('#ab-saldo-estado');
+    if (estadoSaldo) {
+      estadoSaldo.textContent = textoEstadoSaldo(consulta);
+    }
+
     cuenta.innerHTML = activas.length
-      ? activas.map(x => `
+      ? activas.map(x => {
+        const r = encontrarSaldoReserva(consulta, x.id_cuenta);
+        const libre = r?.saldo_libre;
+        const texto = !porPagar
+          ? `Saldo real ${cop(x.saldo_actual)}`
+          : libre != null && Number.isFinite(Number(libre))
+            ? `Libre ${cop(libre)}`
+            : 'Saldo libre por verificar';
+
+        return `
           <option value="${Number(x.id_cuenta)}">
             ${esc(x.nombre_cuenta)}
-            · ${cop(x.saldo_actual)}
+            · ${esc(texto)}
           </option>
-        `).join('')
+        `;
+      }).join('')
       : '<option value="">No tienes cuentas activas</option>';
 
   } catch (e) {
@@ -484,6 +535,8 @@ export async function render(c, idObligacion) {
   form.addEventListener('submit', async ev => {
 
     ev.preventDefault();
+
+    if (!mismaSesion()) return;
 
     const boton = form.querySelector(
       'button[type="submit"]'

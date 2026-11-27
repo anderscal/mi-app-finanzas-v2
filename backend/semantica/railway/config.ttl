@@ -1,0 +1,77 @@
+@prefix rdf:
+    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+
+@prefix fuseki:
+    <http://jena.apache.org/fuseki#> .
+
+@prefix ja:
+    <http://jena.hpl.hp.com/2005/11/Assembler#> .
+
+@prefix tdb2:
+    <http://jena.apache.org/2016/tdb#> .
+
+
+# ======================================
+# SERVIDOR
+# ======================================
+
+<#servidor>
+
+    rdf:type fuseki:Server ;
+
+    fuseki:passwd "/run/fuseki/passwd" ;
+
+    fuseki:auth "basic" ;
+
+    fuseki:allowedUsers "*" ;
+
+    fuseki:services (
+        <#servicioFinanzas>
+    ) ;
+
+    ja:context [
+        ja:cxtName "arq:queryTimeout" ;
+        ja:cxtValue "8000"
+    ] .
+
+
+# ======================================
+# SERVICIO FINANCIERO
+# ======================================
+
+<#servicioFinanzas>
+
+    rdf:type fuseki:Service ;
+
+    fuseki:name "finanzas_demo" ;
+
+    fuseki:allowedUsers "fp_backend" ;
+
+    fuseki:endpoint [
+
+        fuseki:operation fuseki:query ;
+
+        fuseki:name "sparql"
+
+    ] ;
+
+    fuseki:endpoint [
+
+        fuseki:operation fuseki:gsp-rw ;
+
+        fuseki:name "data"
+
+    ] ;
+
+    fuseki:dataset <#datasetFinanzas> .
+
+
+# ======================================
+# DATASET PERSISTENTE
+# ======================================
+
+<#datasetFinanzas>
+
+    rdf:type tdb2:DatasetTDB2 ;
+
+    tdb2:location "/datos/tdb2" .

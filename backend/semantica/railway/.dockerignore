@@ -1,0 +1,6 @@
+*
+
+!Dockerfile
+!config.ttl
+!entrypoint.sh
+!log4j2.properties

@@ -106,8 +106,8 @@ export async function render(c) {
         padding: 12px;
         border-radius: 16px;
 
-        background: #f2f5f3;
-        border: 1px solid #e1e9e4;
+        background: var(--c-bg-f2f5f3);
+        border: 1px solid var(--c-bd-e1e9e4);
 
         scroll-snap-align: start;
       }
@@ -125,8 +125,8 @@ export async function render(c) {
         height: 35px;
 
         border-radius: 50%;
-        background: #fff;
-        color: #087a59;
+        background: var(--c-bg-ffffff);
+        color: var(--c-tx-087a59);
 
         font-size: 17px;
         font-weight: 900;
@@ -146,7 +146,7 @@ export async function render(c) {
         display: block;
         margin: 0;
 
-        color: #142b21;
+        color: var(--c-tx-142b21);
         font-size: 13px;
         font-weight: 800;
         line-height: 1.3;
@@ -159,7 +159,7 @@ export async function render(c) {
       .inicio-mini-tipo {
         display: block;
 
-        color: #64736b;
+        color: var(--c-tx-64736b);
         font-size: 11px;
         line-height: 1.4;
       }
@@ -172,13 +172,13 @@ export async function render(c) {
       }
 
       .inicio-mini-etiqueta {
-        color: #58675e;
+        color: var(--c-tx-58675e);
         font-size: 11px;
         line-height: 1.3;
       }
 
       .inicio-mini-monto {
-        color: #15291f;
+        color: var(--c-tx-15291f);
 
         font-size: 15px;
         font-weight: 900;
@@ -197,44 +197,44 @@ export async function render(c) {
         padding: 9px;
 
         border-radius: 11px;
-        background: #dff1e7;
+        background: var(--c-bg-dff1e7);
       }
 
       .inicio-mini-disponible .inicio-mini-etiqueta {
-        color: #28664f;
+        color: var(--c-tx-28664f);
         font-weight: 700;
       }
 
       .inicio-mini-disponible .inicio-mini-monto {
-        color: #075b42;
+        color: var(--c-tx-075b42);
       }
 
       .inicio-mini-disponible.sin-dato {
-        background: #e8e9e7;
+        background: var(--c-bg-e8e9e7);
       }
 
       .inicio-mini-disponible.sin-dato
       .inicio-mini-monto {
-        color: #66736b;
+        color: var(--c-tx-66736b);
       }
 
       .inicio-mini-disponible.negativo,
       .inicio-mini-disponible.con-reserva {
-        background: #ffe8e2;
+        background: var(--c-bg-ffe8e2);
       }
 
       .inicio-mini-disponible.negativo
       .inicio-mini-etiqueta,
       .inicio-mini-disponible.con-reserva
       .inicio-mini-etiqueta {
-        color: #8f2d1e;
+        color: var(--c-tx-8f2d1e);
       }
 
       .inicio-mini-disponible.negativo
       .inicio-mini-monto,
       .inicio-mini-disponible.con-reserva
       .inicio-mini-monto {
-        color: #a73525;
+        color: var(--c-tx-a73525);
       }
 
       .inicio-mini-detalles {
@@ -248,11 +248,11 @@ export async function render(c) {
         margin-top: auto;
         padding: 8px 5px;
 
-        border: 1px solid #c9dfd1;
+        border: 1px solid var(--c-bd-c9dfd1);
         border-radius: 999px;
 
-        background: #fff;
-        color: #087453;
+        background: var(--c-bg-ffffff);
+        color: var(--c-tx-087453);
 
         font: inherit;
         font-size: 12px;
@@ -262,13 +262,13 @@ export async function render(c) {
       }
 
       .inicio-mini-detalles:hover {
-        background: #e3f3e9;
+        background: var(--c-bg-e3f3e9);
       }
 
       .inicio-mini-pista {
         margin: 0;
 
-        color: #65736b;
+        color: var(--c-tx-65736b);
         font-size: 11px;
         line-height: 1.4;
       }
@@ -279,8 +279,8 @@ export async function render(c) {
         padding: 10px 12px;
         border-radius: 12px;
 
-        background: #fff2d9;
-        color: #81531e;
+        background: var(--c-bg-fff2d9);
+        color: var(--c-tx-81531e);
 
         font-size: 12px;
         line-height: 1.5;
@@ -305,8 +305,8 @@ export async function render(c) {
         border: 0;
         border-radius: 20px;
 
-        background: #fff;
-        color: #142b21;
+        background: var(--c-bg-ffffff);
+        color: var(--c-tx-142b21);
 
         overflow: hidden;
         box-shadow: 0 20px 65px #0004;
@@ -329,7 +329,7 @@ export async function render(c) {
 
         padding: 19px 19px 15px;
 
-        border-bottom: 1px solid #e2eae5;
+        border-bottom: 1px solid var(--c-bd-e2eae5);
       }
 
       .inicio-dialogo-titulo {
@@ -352,7 +352,7 @@ export async function render(c) {
         margin: 0;
 
         font-size: 13px;
-        color: #67756d;
+        color: var(--c-tx-67756d);
       }
 
       .inicio-dialogo-cerrar {
@@ -368,8 +368,8 @@ export async function render(c) {
         border: 0;
         border-radius: 50%;
 
-        background: #edf2ee;
-        color: #263a30;
+        background: var(--c-bg-edf2ee);
+        color: var(--c-tx-263a30);
 
         font-size: 24px;
         cursor: pointer;
@@ -395,12 +395,12 @@ export async function render(c) {
         padding: 14px;
 
         border-radius: 14px;
-        background: #f0f4f1;
+        background: var(--c-bg-f0f4f1);
       }
 
       .inicio-dialogo-cifra span {
         font-size: 12px;
-        color: #607268;
+        color: var(--c-tx-607268);
       }
 
       .inicio-dialogo-cifra strong {
@@ -411,19 +411,19 @@ export async function render(c) {
       }
 
       .inicio-dialogo-cifra.libre {
-        background: #dff2e7;
+        background: var(--c-bg-dff2e7);
       }
 
       .inicio-dialogo-cifra.libre strong {
-        color: #075b42;
+        color: var(--c-tx-075b42);
       }
 
       .inicio-dialogo-cifra.negativa {
-        background: #ffe8e2;
+        background: var(--c-bg-ffe8e2);
       }
 
       .inicio-dialogo-cifra.negativa strong {
-        color: #a73525;
+        color: var(--c-tx-a73525);
       }
 
       .inicio-dialogo-fila {
@@ -437,7 +437,7 @@ export async function render(c) {
       }
 
       .inicio-dialogo-fila span {
-        color: #5c6b62;
+        color: var(--c-tx-5c6b62);
       }
 
       .inicio-dialogo-fila strong {
@@ -451,8 +451,8 @@ export async function render(c) {
         padding: 11px;
         border-radius: 11px;
 
-        background: #fff3dd;
-        color: #875521;
+        background: var(--c-bg-fff3dd);
+        color: var(--c-tx-875521);
 
         font-size: 12px;
         line-height: 1.5;
@@ -464,7 +464,7 @@ export async function render(c) {
 
         padding: 15px 19px;
 
-        border-top: 1px solid #e2eae5;
+        border-top: 1px solid var(--c-bd-e2eae5);
       }
 
       .inicio-dialogo-pie a,
@@ -490,15 +490,15 @@ export async function render(c) {
       }
 
       .inicio-dialogo-pie button {
-        border: 1px solid #d5e3da;
-        background: #f3f6f4;
-        color: #263b30;
+        border: 1px solid var(--c-bd-d5e3da);
+        background: var(--c-bg-f3f6f4);
+        color: var(--c-tx-263b30);
       }
 
       .inicio-dialogo-editar {
-        border: 1px solid #087a59;
-        background: #087a59;
-        color: white !important;
+        border: 1px solid var(--c-bd-087a59);
+        background: var(--c-bg-087a59);
+        color: var(--c-tx-ffffff) !important;
       }
 
       @media (max-width: 380px) {

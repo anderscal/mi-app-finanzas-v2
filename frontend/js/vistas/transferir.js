@@ -63,7 +63,7 @@ export async function render(c) {
   c.innerHTML = `
     <style>
       .tr-saldos {
-        background: #edf5f0;
+        background: var(--c-bg-edf5f0);
         border-radius: 14px;
         padding: 12px 14px;
         display: flex;
@@ -81,20 +81,20 @@ export async function render(c) {
 
       .tr-saldos .principal {
         font-weight: 800;
-        color: #075640;
+        color: var(--c-tx-075640);
         font-size: 14px;
       }
 
       .tr-saldos .aviso {
         font-size: 12px;
         font-weight: 700;
-        color: #95521c;
+        color: var(--c-tx-95521c);
         line-height: 1.45;
       }
 
       .tr-saldos .fuente {
         font-size: 11px;
-        color: #5d6b62;
+        color: var(--c-tx-5d6b62);
         line-height: 1.4;
       }
     </style>

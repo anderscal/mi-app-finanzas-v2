@@ -1315,6 +1315,13 @@ def test_279_integracion_sql_y_rdf(
         )
     )
 
+    # Habilitar IA solo para esta cuenta ficticia.
+    # El gateway de Gemini se simula en esta prueba.
+    monkeypatch.setenv("RAG_IA_HABILITADA", "1")
+    monkeypatch.setenv(
+        "RAG_DEMO_USUARIOS", str(usuario.id_usuario)
+    )
+
     crear_cuenta(
         db_session,
 

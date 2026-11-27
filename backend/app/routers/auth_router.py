@@ -24,9 +24,9 @@ from app.schemas.auth_schema import (
     UsuarioRespuesta,
 )
 
-from app.business.auth_business_service import (
-    registrar_usuario,
-    iniciar_sesion,
+from app.business.seguridad_productiva_service import (
+    registrar_protegido as registrar_usuario,
+    iniciar_sesion_protegida as iniciar_sesion,
 )
 
 from app.business.cuenta_service import (
@@ -34,10 +34,14 @@ from app.business.cuenta_service import (
 )
 
 
-from app.routers.password_router import router as password_router
+from app.routers.password_router import (
+    router as password_router,
+    RutaPrivada,
+)
 
 
 router = APIRouter(
+    route_class=RutaPrivada,
     prefix="/auth",
     tags=["Autenticación"],
 )

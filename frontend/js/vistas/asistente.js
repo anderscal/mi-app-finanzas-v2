@@ -774,7 +774,7 @@ export async function render(c) {
 
       .rag-usuario {
         background: var(--marca-oscuro);
-        color: white;
+        color: var(--c-tx-ffffff);
         justify-self: end;
         max-width: 88%;
       }
@@ -992,7 +992,7 @@ export async function render(c) {
           <span>
             Autorizo enviar mi pregunta y los
             datos financieros recuperados a
-            Google Gemini, un servicio externo.
+            Google Gemini, un servicio externo. Solo datos ficticios.
           </span>
 
         </label>

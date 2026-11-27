@@ -1,0 +1,40 @@
+name: finanzas-railway-qa
+
+services:
+  fuseki:
+    container_name: finanzas-fuseki-railway-qa
+
+    image: finanzas-fuseki-railway:6.3.0
+
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        JENA_VERSION: "6.3.0"
+
+    ports:
+      - "127.0.0.1:3031:3030"
+
+    environment:
+      PORT: "3030"
+
+      FUSEKI_USER: "fp_backend"
+
+      FUSEKI_PASSWORD: "${QA_FUSEKI_PASSWORD:?Configura QA_FUSEKI_PASSWORD}"
+
+    volumes:
+      - datos_qa:/datos/tdb2
+
+    mem_limit: 500000000
+
+    cpus: 1.0
+
+    init: true
+
+    restart: "no"
+
+    stop_grace_period: 30s
+
+volumes:
+  datos_qa:
+    name: finanzas_tdb2_285c2_qa

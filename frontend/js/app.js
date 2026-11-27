@@ -4,6 +4,7 @@
 import { haySesion } from './sesion.js';
 import { sincronizar } from './offline.js';
 import { icono, aviso } from './util.js';
+import { iniciarTema } from './tema.js';
 
 import * as login from './vistas/login.js';
 import * as registro from './vistas/registro.js';
@@ -360,5 +361,6 @@ if ('serviceWorker' in navigator) {
 // INICIALIZACION
 // ------------------------------------
 
+iniciarTema();
 navegar();
 intentarSincronizar();

@@ -269,6 +269,14 @@ export async function render(c) {
         error.textContent =
           'Correo o contraseña incorrectos.';
 
+      } else if (
+        e instanceof ErrorApi &&
+        e.estado === 429
+      ) {
+
+        error.textContent =
+          'Demasiados intentos. Intenta más tarde.';
+
       } else {
 
         error.textContent =

@@ -1,0 +1,260 @@
+/* Tema claro / oscuro.
+   Los colores de la app usan estas variables; el modo oscuro solo cambia sus valores.
+   Las variables --c-* se generaron a partir de los colores originales (rol: tx texto, bg fondo, bd borde). */
+
+:root {
+  --c-bd-087a59: #087a59;
+  --c-bd-b9c6c0: #b9c6c0;
+  --c-bd-c9d3ce: #c9d3ce;
+  --c-bd-c9dfd1: #c9dfd1;
+  --c-bd-d5e3da: #d5e3da;
+  --c-bd-dde5e1: #dde5e1;
+  --c-bd-e1e9e4: #e1e9e4;
+  --c-bd-e2cd8a: #e2cd8a;
+  --c-bd-e2eae5: #e2eae5;
+  --c-bd-e4ebe7: #e4ebe7;
+  --c-bd-e7ece9: #e7ece9;
+  --c-bd-e8d28a: #e8d28a;
+  --c-bd-ffffff: #ffffff;
+  --c-bg-087a59: #087a59;
+  --c-bg-7a3a0c: #7a3a0c;
+  --c-bg-9a3309: #9a3309;
+  --c-bg-bf5538: #bf5538;
+  --c-bg-d59a2a: #d59a2a;
+  --c-bg-dbe6df: #dbe6df;
+  --c-bg-dde5e1: #dde5e1;
+  --c-bg-dff1e7: #dff1e7;
+  --c-bg-dff2e7: #dff2e7;
+  --c-bg-e0f2e9: #e0f2e9;
+  --c-bg-e2f3eb: #e2f3eb;
+  --c-bg-e3f3e9: #e3f3e9;
+  --c-bg-e4f3eb: #e4f3eb;
+  --c-bg-e6f4ec: #e6f4ec;
+  --c-bg-e8e9e7: #e8e9e7;
+  --c-bg-e9eeec: #e9eeec;
+  --c-bg-edf1ef: #edf1ef;
+  --c-bg-edf2ee: #edf2ee;
+  --c-bg-edf5f0: #edf5f0;
+  --c-bg-eef3ef: #eef3ef;
+  --c-bg-eef5f1: #eef5f1;
+  --c-bg-f0f2f1: #f0f2f1;
+  --c-bg-f0f4f1: #f0f4f1;
+  --c-bg-f1f3f2: #f1f3f2;
+  --c-bg-f1f7f4: #f1f7f4;
+  --c-bg-f2f5f3: #f2f5f3;
+  --c-bg-f3f6f4: #f3f6f4;
+  --c-bg-ffe2da: #ffe2da;
+  --c-bg-ffe8e2: #ffe8e2;
+  --c-bg-fff0cd: #fff0cd;
+  --c-bg-fff2d9: #fff2d9;
+  --c-bg-fff3dd: #fff3dd;
+  --c-bg-ffffff: #ffffff;
+  --c-tx-07533e: #07533e;
+  --c-tx-075640: #075640;
+  --c-tx-075b42: #075b42;
+  --c-tx-08684c: #08684c;
+  --c-tx-087453: #087453;
+  --c-tx-087a59: #087a59;
+  --c-tx-0b4a37: #0b4a37;
+  --c-tx-142b21: #142b21;
+  --c-tx-15291f: #15291f;
+  --c-tx-17251f: #17251f;
+  --c-tx-25342d: #25342d;
+  --c-tx-263a30: #263a30;
+  --c-tx-263b30: #263b30;
+  --c-tx-28664f: #28664f;
+  --c-tx-52645a: #52645a;
+  --c-tx-58675e: #58675e;
+  --c-tx-586960: #586960;
+  --c-tx-59675f: #59675f;
+  --c-tx-5a4a12: #5a4a12;
+  --c-tx-5c6b62: #5c6b62;
+  --c-tx-5d6b62: #5d6b62;
+  --c-tx-607268: #607268;
+  --c-tx-64736b: #64736b;
+  --c-tx-65736b: #65736b;
+  --c-tx-66736b: #66736b;
+  --c-tx-67756d: #67756d;
+  --c-tx-6a4f00: #6a4f00;
+  --c-tx-6b2a08: #6b2a08;
+  --c-tx-705821: #705821;
+  --c-tx-81531e: #81531e;
+  --c-tx-845400: #845400;
+  --c-tx-875521: #875521;
+  --c-tx-8f2d1e: #8f2d1e;
+  --c-tx-8f2f07: #8f2f07;
+  --c-tx-915419: #915419;
+  --c-tx-95521c: #95521c;
+  --c-tx-975212: #975212;
+  --c-tx-a13724: #a13724;
+  --c-tx-a73525: #a73525;
+  --c-tx-ad3021: #ad3021;
+  --c-tx-b42318: #b42318;
+  --c-tx-e2f2ea: #e2f2ea;
+  --c-tx-ffffff: #ffffff;
+  color-scheme: light;
+}
+
+:root[data-tema="oscuro"] {
+  color-scheme: dark;
+
+  /* Identidad */
+  --marca: #13996D;
+  --marca-oscuro: #0B5A42;
+  --marca-suave: #15302A;
+  --oro: #F4B400;
+  --oro-tinta: #1F1600;
+  --oro-suave: #2D2710;
+  --tinta: #E4ECE8;
+  --tenue: #9AA9A2;
+  --gris: #18221F;
+  --linea: #24302C;
+  --gasto: #F0804C;
+  --gasto-suave: #3A2218;
+  --fondo: #0F1614;
+  --sobre-marca: #CDEBDD;
+
+  --c-bd-087a59: #087a59;
+  --c-bd-b9c6c0: #3b403d;
+  --c-bd-c9d3ce: #3b403d;
+  --c-bd-c9dfd1: #3e4c43;
+  --c-bd-d5e3da: #38423c;
+  --c-bd-dde5e1: #3a403d;
+  --c-bd-e1e9e4: #39413c;
+  --c-bd-e2cd8a: #e2cd8a;
+  --c-bd-e2eae5: #39413c;
+  --c-bd-e4ebe7: #3a413d;
+  --c-bd-e7ece9: #3a403d;
+  --c-bd-e8d28a: #e8d28a;
+  --c-bd-ffffff: #3d3d3d;
+  --c-bg-087a59: #087a59;
+  --c-bg-7a3a0c: #7a3a0c;
+  --c-bg-9a3309: #9a3309;
+  --c-bg-bf5538: #bf5538;
+  --c-bg-d59a2a: #d59a2a;
+  --c-bg-dbe6df: #323834;
+  --c-bg-dde5e1: #323735;
+  --c-bg-dff1e7: #24382d;
+  --c-bg-dff2e7: #23392c;
+  --c-bg-e0f2e9: #24382e;
+  --c-bg-e2f3eb: #23382e;
+  --c-bg-e3f3e9: #23372b;
+  --c-bg-e4f3eb: #24372c;
+  --c-bg-e6f4ec: #23362b;
+  --c-bg-e8e9e7: #2e2f2d;
+  --c-bg-e9eeec: #070b0a;
+  --c-bg-edf1ef: #262a28;
+  --c-bg-edf2ee: #252a26;
+  --c-bg-edf5f0: #243229;
+  --c-bg-eef3ef: #242925;
+  --c-bg-eef5f1: #25312a;
+  --c-bg-f0f2f1: #252726;
+  --c-bg-f0f4f1: #232724;
+  --c-bg-f1f3f2: #242625;
+  --c-bg-f1f7f4: #24302a;
+  --c-bg-f2f5f3: #222523;
+  --c-bg-f3f6f4: #212522;
+  --c-bg-ffe2da: #392620;
+  --c-bg-ffe8e2: #37241f;
+  --c-bg-fff0cd: #3c3422;
+  --c-bg-fff2d9: #393121;
+  --c-bg-fff3dd: #383020;
+  --c-bg-ffffff: #1a1a1a;
+  --c-tx-07533e: #82e3c8;
+  --c-tx-075640: #82e3c8;
+  --c-tx-075b42: #81e4c6;
+  --c-tx-08684c: #81e4c7;
+  --c-tx-087453: #81e4c6;
+  --c-tx-087a59: #80e5c8;
+  --c-tx-0b4a37: #88ddc3;
+  --c-tx-142b21: #9ec7b5;
+  --c-tx-15291f: #a0c5b2;
+  --c-tx-17251f: #d5dcd9;
+  --c-tx-25342d: #cdd3d0;
+  --c-tx-263a30: #cad2ce;
+  --c-tx-263b30: #c9d2cd;
+  --c-tx-28664f: #99ccb9;
+  --c-tx-52645a: #b1b7b4;
+  --c-tx-58675e: #afb4b1;
+  --c-tx-586960: #aeb3b1;
+  --c-tx-59675f: #afb3b1;
+  --c-tx-5a4a12: #d9c88c;
+  --c-tx-5c6b62: #acb1ae;
+  --c-tx-5d6b62: #acb1ae;
+  --c-tx-607268: #a9aeab;
+  --c-tx-64736b: #a8acaa;
+  --c-tx-65736b: #a8aca9;
+  --c-tx-66736b: #a7aca9;
+  --c-tx-67756d: #a6aba8;
+  --c-tx-6a4f00: #eccf79;
+  --c-tx-6b2a08: #e4a381;
+  --c-tx-705821: #d2bf93;
+  --c-tx-81531e: #d6b58f;
+  --c-tx-845400: #ecc279;
+  --c-tx-875521: #d5b390;
+  --c-tx-8f2d1e: #d8978d;
+  --c-tx-8f2f07: #e79d7e;
+  --c-tx-915419: #dbb28a;
+  --c-tx-95521c: #daae8b;
+  --c-tx-975212: #e0b185;
+  --c-tx-a13724: #d7998e;
+  --c-tx-a73525: #d7978e;
+  --c-tx-ad3021: #d9948c;
+  --c-tx-b42318: #de8d87;
+  --c-tx-e2f2ea: #e2f2ea;
+  --c-tx-ffffff: #ffffff;
+}
+
+/* La franja superior un poco más profunda para no encandilar */
+:root[data-tema="oscuro"] .banda { background: #0C5A42; }
+:root[data-tema="oscuro"] .banda.banda-oscura { background: #08402F; }
+:root[data-tema="oscuro"] #toast { background: #2A3833; color: #F1F6F3; }
+:root[data-tema="oscuro"] .ocultar-montos .monto { text-shadow: 0 0 10px rgba(228,236,232,0.55); }
+:root[data-tema="oscuro"] input,
+:root[data-tema="oscuro"] select,
+:root[data-tema="oscuro"] textarea { color: var(--tinta); }
+:root[data-tema="oscuro"] ::placeholder { color: #74827C; }
+:root[data-tema="oscuro"] img[src$=".svg"] { filter: none; }
+
+/* Transición suave al cambiar de tema (no al cargar) */
+:root.tema-cambiando,
+:root.tema-cambiando * {
+  transition: background-color .35s ease, color .35s ease, border-color .35s ease, fill .35s ease !important;
+}
+
+/* ---------- Botón de tema ---------- */
+.btn-tema {
+  width: 36px; height: 36px; flex: none;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.22);
+  background: rgba(255,255,255,0.12);
+  color: #fff;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0; position: relative; overflow: hidden;
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  transition: background .2s ease, transform .15s ease;
+}
+.btn-tema:hover { background: rgba(255,255,255,0.2); }
+.btn-tema:active { transform: scale(0.92); }
+.btn-tema svg {
+  position: absolute; width: 18px; height: 18px;
+  transition: transform .45s cubic-bezier(.5,1.6,.4,1), opacity .25s ease;
+}
+.btn-tema .ico-luna { transform: rotate(-90deg) scale(.4); opacity: 0; }
+:root[data-tema="oscuro"] .btn-tema .ico-sol { transform: rotate(90deg) scale(.4); opacity: 0; }
+:root[data-tema="oscuro"] .btn-tema .ico-luna { transform: none; opacity: 1; }
+
+/* Ubicación: esquina superior derecha de la franja verde */
+.banda.con-tema { position: relative; }
+.banda.con-tema > .btn-tema { position: absolute; top: 16px; right: 14px; z-index: 2; }
+.banda-acciones .btn-tema { align-self: center; margin-right: 4px; }
+
+/* Pantallas sin franja (login y registro) */
+.btn-tema.flotante {
+  position: absolute; top: 14px; right: 14px; z-index: 5;
+  border-color: var(--linea); background: var(--gris); color: var(--tinta);
+}
+
+/* Botones sin color propio: en oscuro el navegador los pinta gris claro.
+   :where() deja la especificidad en 0 para no tapar .btn-primario, .btn-oro, etc. */
+:where(:root[data-tema="oscuro"]) :where(.btn) { background-color: #1D2925; color: var(--tinta); }

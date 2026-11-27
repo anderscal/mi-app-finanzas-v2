@@ -131,8 +131,8 @@ export async function render(c) {
       .pm-nuevo {
         border: 0;
         border-radius: 999px;
-        background: #087a59;
-        color: white;
+        background: var(--c-bg-087a59);
+        color: var(--c-tx-ffffff);
         padding: 11px 15px;
         font: inherit;
         font-size: 13px;
@@ -176,7 +176,7 @@ export async function render(c) {
         display: flex;
         flex-direction: column;
         gap: 10px;
-        background: #f3f6f4;
+        background: var(--c-bg-f3f6f4);
         border-radius: 17px;
         padding: 16px;
       }
@@ -195,38 +195,38 @@ export async function render(c) {
 
       .pm-etiqueta {
         border-radius: 999px;
-        background: #e0f2e9;
-        color: #08684c;
+        background: var(--c-bg-e0f2e9);
+        color: var(--c-tx-08684c);
         padding: 5px 9px;
         font-size: 11px;
         font-weight: 800;
       }
 
       .pm-etiqueta.alerta {
-        background: #fff0cd;
-        color: #845400;
+        background: var(--c-bg-fff0cd);
+        color: var(--c-tx-845400);
       }
 
       .pm-etiqueta.exceso {
-        background: #ffe2da;
-        color: #a13724;
+        background: var(--c-bg-ffe2da);
+        color: var(--c-tx-a13724);
       }
 
       .pm-nota {
         font-size: 12px;
-        color: #586960;
+        color: var(--c-tx-586960);
         line-height: 1.5;
       }
 
       .pm-alerta {
         font-size: 12px;
-        color: #915419;
+        color: var(--c-tx-915419);
         line-height: 1.5;
       }
 
       .pm-barra {
         height: 9px;
-        background: #dbe6df;
+        background: var(--c-bg-dbe6df);
         border-radius: 999px;
         overflow: hidden;
       }
@@ -234,15 +234,15 @@ export async function render(c) {
       .pm-barra span {
         display: block;
         height: 100%;
-        background: #087a59;
+        background: var(--c-bg-087a59);
       }
 
       .pm-barra span.alerta {
-        background: #d59a2a;
+        background: var(--c-bg-d59a2a);
       }
 
       .pm-barra span.exceso {
-        background: #bf5538;
+        background: var(--c-bg-bf5538);
       }
 
       .pm-acciones {
@@ -260,7 +260,7 @@ export async function render(c) {
       }
 
       .pm-resumen > div {
-        background: #eef3ef;
+        background: var(--c-bg-eef3ef);
         border-radius: 14px;
         padding: 13px;
         display: flex;
@@ -271,7 +271,7 @@ export async function render(c) {
 
       .pm-resumen span {
         font-size: 12px;
-        color: #586960;
+        color: var(--c-tx-586960);
       }
 
       .pm-resumen strong {
@@ -280,7 +280,7 @@ export async function render(c) {
       }
 
       .pm-compacto {
-        background: #e6f4ec;
+        background: var(--c-bg-e6f4ec);
         border-radius: 16px;
         padding: 14px;
         display: flex;
@@ -291,7 +291,7 @@ export async function render(c) {
       .pm-compacto .cantidad {
         font-weight: 800;
         font-size: 22px;
-        color: #075640;
+        color: var(--c-tx-075640);
       }
 
       .pm-compacto .enlace {
@@ -300,7 +300,7 @@ export async function render(c) {
       }
 
       .pm-error {
-        color: #ad3021;
+        color: var(--c-tx-ad3021);
         font-size: 13px;
         line-height: 1.5;
       }
@@ -318,8 +318,8 @@ export async function render(c) {
         border-radius: 20px;
         padding: 0;
         margin: auto;
-        background: white;
-        color: #17251f;
+        background: var(--c-bg-ffffff);
+        color: var(--c-tx-17251f);
         overflow: hidden;
         box-shadow: 0 18px 60px #0003;
       }
@@ -349,12 +349,12 @@ export async function render(c) {
         gap: 10px;
         padding: 16px 20px;
         flex-shrink: 0;
-        border-bottom: 1px solid #e4ebe7;
+        border-bottom: 1px solid var(--c-bd-e4ebe7);
       }
 
       .pm-modal-pie {
         border: 0;
-        border-top: 1px solid #e4ebe7;
+        border-top: 1px solid var(--c-bd-e4ebe7);
       }
 
       .pm-modal-pie button {
@@ -372,7 +372,7 @@ export async function render(c) {
         height: 36px;
         border: 0;
         border-radius: 50%;
-        background: #edf1ef;
+        background: var(--c-bg-edf1ef);
         font-size: 23px;
       }
 
@@ -399,8 +399,8 @@ export async function render(c) {
       }
 
       .pm-modal-nota {
-        background: #e4f3eb;
-        color: #07533e;
+        background: var(--c-bg-e4f3eb);
+        color: var(--c-tx-07533e);
         border-radius: 13px;
         padding: 12px;
         font-size: 13px;

@@ -19,6 +19,10 @@ from app.persistence import (
     password_repository as repo,
 )
 
+from app.persistence import (
+    limite_recuperacion_repository as limite_repo,
+)
+
 from app.persistence.usuario_repository import (
     buscar_usuario_por_email,
 )
@@ -136,6 +140,54 @@ def _entregar(config, email, token):
 # SOLICITAR RECUPERACION
 # ========================================
 
+MAX_GLOBAL_15_MINUTOS = 20
+
+MAX_GLOBAL_24_HORAS = 200
+
+
+def _controlar_limite_global(db):
+
+    try:
+
+        permitido = limite_repo.reservar_cupo(
+            db,
+
+            MAX_GLOBAL_15_MINUTOS,
+
+            MAX_GLOBAL_24_HORAS,
+        )
+
+        if permitido:
+
+            db.commit()
+
+        else:
+
+            db.rollback()
+
+    except Exception as error:
+
+        db.rollback()
+
+        logger.warning(
+            "Recuperacion: control global no disponible"
+        )
+
+        raise ErrorNegocio(
+            CodigoError.FUENTE_NO_DISPONIBLE,
+
+            "Recuperacion temporalmente no disponible.",
+        ) from error
+
+    if not permitido:
+
+        raise ErrorNegocio(
+            CodigoError.LIMITE_SOLICITUDES,
+
+            "Limite de solicitudes alcanzado. Intenta mas tarde.",
+        )
+
+
 def solicitar_recuperacion(db, email):
 
     try:
@@ -149,6 +201,8 @@ def solicitar_recuperacion(db, email):
 
             "Recuperacion temporalmente no disponible.",
         ) from error
+
+    _controlar_limite_global(db)
 
     try:
 

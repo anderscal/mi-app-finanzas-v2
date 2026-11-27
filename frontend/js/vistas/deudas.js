@@ -53,8 +53,8 @@ export async function render(c) {
         gap: 6px;
         border: 0;
         border-radius: 100px;
-        background: #087a59;
-        color: white;
+        background: var(--c-bg-087a59);
+        color: var(--c-tx-ffffff);
         padding: 11px 16px;
         font: inherit;
         font-size: 14px;
@@ -88,8 +88,8 @@ export async function render(c) {
         padding: 0;
         border: 0;
         border-radius: 22px;
-        background: #fff;
-        color: #17251f;
+        background: var(--c-bg-ffffff);
+        color: var(--c-tx-17251f);
         box-shadow: 0 18px 60px rgba(0, 0, 0, .2);
         overflow: hidden;
       }
@@ -117,7 +117,7 @@ export async function render(c) {
         justify-content: space-between;
         gap: 12px;
         padding: 19px 22px;
-        border-bottom: 1px solid #e7ece9;
+        border-bottom: 1px solid var(--c-bd-e7ece9);
         flex-shrink: 0;
       }
 
@@ -134,8 +134,8 @@ export async function render(c) {
         height: 36px;
         border: 0;
         border-radius: 50%;
-        background: #f0f2f1;
-        color: #25342d;
+        background: var(--c-bg-f0f2f1);
+        color: var(--c-tx-25342d);
         font-size: 24px;
         cursor: pointer;
       }
@@ -159,10 +159,10 @@ export async function render(c) {
         width: 100%;
         max-width: 100%;
         padding: 13px 15px;
-        background: #f1f3f2;
+        background: var(--c-bg-f1f3f2);
         border: 1px solid transparent;
         border-radius: 15px;
-        color: #17251f;
+        color: var(--c-tx-17251f);
         font: inherit;
       }
 
@@ -174,20 +174,20 @@ export async function render(c) {
       .obl-modal-cuerpo .campo input:focus,
       .obl-modal-cuerpo .campo select:focus,
       .obl-modal-cuerpo .campo textarea:focus {
-        outline: 2px solid #087a59;
+        outline: 2px solid var(--c-bd-087a59);
       }
 
       .obl-modal-nota {
         padding: 12px;
         border-radius: 12px;
-        background: #e2f3eb;
-        color: #07533e;
+        background: var(--c-bg-e2f3eb);
+        color: var(--c-tx-07533e);
         font-size: 13px;
         line-height: 1.5;
       }
 
       .obl-modal-error {
-        color: #b42318;
+        color: var(--c-tx-b42318);
         font-size: 13px;
         margin-top: 12px;
       }
@@ -201,7 +201,7 @@ export async function render(c) {
         gap: 10px;
         flex-shrink: 0;
         padding: 15px 22px;
-        border-top: 1px solid #e7ece9;
+        border-top: 1px solid var(--c-bd-e7ece9);
       }
 
       .obl-modal-pie button {
@@ -218,7 +218,7 @@ export async function render(c) {
         margin: 16px 0;
         padding: 15px;
         border-radius: 15px;
-        background: #f1f7f4;
+        background: var(--c-bg-f1f7f4);
       }
 
       .obl-grupo-inicial[hidden] {
@@ -248,14 +248,14 @@ export async function render(c) {
       .obl-obligatorio {
         display: inline-block;
         margin-bottom: 7px;
-        color: #07533e;
+        color: var(--c-tx-07533e);
         font-weight: 700;
       }
 
       .obl-obligatorio-nota {
         margin-top: 7px;
         font-size: 12px;
-        color: #52645a;
+        color: var(--c-tx-52645a);
       }
 
       @media (max-width: 430px) {

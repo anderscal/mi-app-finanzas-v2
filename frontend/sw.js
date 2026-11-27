@@ -1,6 +1,6 @@
 // Service Worker: solo recursos estaticos de la PWA.
 
-const VERSION = 'fp-v31';
+const VERSION = 'fp-v34';
 
 const ARCHIVOS = [
   './',
@@ -8,6 +8,7 @@ const ARCHIVOS = [
   'manifest.webmanifest',
   'icons/icono.svg',
   'css/estilos.css',
+  'css/tema.css',
 
   'js/app.js',
   'js/api.js',
@@ -17,6 +18,8 @@ const ARCHIVOS = [
   'js/offline-db.js',
   'js/sync.js',
   'js/util.js',
+  'js/tema.js',
+  'js/tema-inicial.js',
   'js/saldo-consulta.js',
   'js/rag-api.js',
 
