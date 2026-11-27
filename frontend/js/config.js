@@ -1,8 +1,13 @@
-// Configuración del frontend. Es el único archivo que hay que tocar
-// al pasar de local a producción.
+// Configuracion del frontend para desarrollo y produccion.
+
+const entornoLocal = [
+  'localhost',
+  '127.0.0.1',
+  '[::1]'
+].includes(window.location.hostname);
 
 export const CONFIG = {
-  // Dirección del backend FastAPI.
-  // En producción se reemplazará por la URL pública.
-  API_URL: 'http://127.0.0.1:8000',
+  API_URL: entornoLocal
+    ? 'http://127.0.0.1:8000'
+    : 'https://finanzas-personales-api-4rry.onrender.com',
 };
