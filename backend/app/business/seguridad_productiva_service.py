@@ -163,40 +163,6 @@ def registrar_protegido(db, datos):
 
 
 # ======================================
-# AUTORIZACION DEMO
-# ======================================
-
-def _demo_autorizada(uid):
-
-    valores = os.getenv(
-        "RAG_DEMO_USUARIOS",
-        "",
-    ).strip().split(",")
-
-    valores = [
-        v.strip()
-        for v in valores
-    ]
-
-    if any(
-        not v.isascii()
-        or not v.isdecimal()
-        for v in valores
-    ):
-
-        return False
-
-    return (
-
-        type(uid) is int
-
-        and uid > 0
-
-        and str(uid) in valores
-    )
-
-
-# ======================================
 # RAG PROTEGIDO
 # ======================================
 
@@ -206,6 +172,15 @@ def responder_demo(
     pregunta,
     autorizo,
 ):
+
+    if type(uid) is not int or uid <= 0:
+
+        raise ErrorRAG(
+
+            403,
+
+            "Usuario no autorizado.",
+        )
 
     if autorizo is not True:
 
@@ -226,15 +201,6 @@ def responder_demo(
             503,
 
             "Asistente no habilitado.",
-        )
-
-    if not _demo_autorizada(uid):
-
-        raise ErrorRAG(
-
-            403,
-
-            "Asistente reservado a cuentas de demostracion.",
         )
 
     _controlar(

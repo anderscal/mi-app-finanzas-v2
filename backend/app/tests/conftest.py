@@ -173,7 +173,7 @@ os.environ.update({
     "SEMANTICA_EXPORTACION_LOCAL": "0",
 
     "RAG_IA_HABILITADA": "0",
-    "RAG_DEMO_USUARIOS": "",
+
 
     "GEMINI_API_KEY": "",
 

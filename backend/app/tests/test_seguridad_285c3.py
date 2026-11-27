@@ -108,10 +108,7 @@ def cuenta_demo(client, monkeypatch):
         "1",
     )
 
-    monkeypatch.setenv(
-        "RAG_DEMO_USUARIOS",
-        str(uid),
-    )
+  
 
     return uid, headers
 
@@ -229,15 +226,14 @@ def test_registro_limite_global(
 
 
 # ======================================
-# 4-6. RECHAZOS PREVIOS AL RAG
+# 4-5. RECHAZOS PREVIOS AL RAG
 # ======================================
 
 @pytest.mark.parametrize(
-    "habilitada, autorizada, consentimiento, esperado",
+    "habilitada, consentimiento, esperado",
     [
-        ("1", False, True, 403),
-        ("1", True, False, 403),
-        ("0", True, True, 503),
+        ("1", False, 403),
+        ("0", True, 503),
     ],
 )
 def test_rechazo_rag(
@@ -247,7 +243,6 @@ def test_rechazo_rag(
     ia_simulada,
     monkeypatch,
     habilitada,
-    autorizada,
     consentimiento,
     esperado,
 ):
@@ -257,11 +252,6 @@ def test_rechazo_rag(
     monkeypatch.setenv(
         "RAG_IA_HABILITADA",
         habilitada,
-    )
-
-    monkeypatch.setenv(
-        "RAG_DEMO_USUARIOS",
-        str(uid) if autorizada else "",
     )
 
     r = preguntar(
@@ -278,6 +268,41 @@ def test_rechazo_rag(
         db_session,
         "rag",
     ) == 0
+
+
+# ======================================
+# 6. ACCESO SIN LISTA DE USUARIOS
+# ======================================
+
+def test_rag_usuario_autenticado(
+    client,
+    db_session,
+    cuenta_demo,
+    ia_simulada,
+    monkeypatch,
+):
+
+    uid, headers = cuenta_demo
+
+    monkeypatch.delenv(
+        "RAG_DEMO_USUARIOS",
+        raising=False,
+    )
+
+    r = preguntar(
+        client,
+        headers,
+        True,
+    )
+
+    assert r.status_code == 200
+
+    assert ia_simulada == [uid]
+
+    assert cantidad(
+        db_session,
+        "rag",
+    ) == 1
 
 
 # ======================================
